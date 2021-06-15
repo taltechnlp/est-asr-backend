@@ -1,4 +1,6 @@
 .vscode
-uploads/
+uploads/*
 logs/
 scripts.json
+.nextflow*
+nextflow.log

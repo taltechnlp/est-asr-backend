@@ -2,7 +2,7 @@
 import {Pool} from "https://deno.land/x/postgres/mod.ts";
 import "https://deno.land/x/dotenv/load.ts";
 
-const POOL_CONNECTIONS = 10;
+const POOL_CONNECTIONS = 5;
 
 const dbPool = new Pool({
     user: Deno.env.get('DB_USER'),
@@ -13,6 +13,8 @@ const dbPool = new Pool({
     tls: {enforce: false}
 }, POOL_CONNECTIONS);
 
-export { dbPool }
+const RESULTS_DIR = Deno.env.get('RESULTS_DIR')
+
+export { dbPool, RESULTS_DIR }
 
 

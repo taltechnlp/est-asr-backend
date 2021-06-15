@@ -1,7 +1,5 @@
-import { readLines, readerFromStreamReader } from "https://deno.land/std/io/mod.ts";
 import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
-import { format } from 'https://deno.land/std@0.97.0/datetime/mod.ts'
-import {dbPool} from "../database.ts";
+import {dbPool, RESULTS_DIR} from "../database.ts";
 
 interface FormDataFile {
   content: string,
@@ -11,58 +9,57 @@ interface FormDataFile {
   originalName: string,
 } 
 
-const maxSizeBytes = 2000000000
+const MAX_SIZE_BYTES = 2000000000
+const DEFAULT_RESULT_TYPE = "json"
 
-const uploadFile = async ({ request, response, params }: { request: any, response: any, params: any }) => { 
+
+// deno-lint-ignore no-explicit-any
+const uploadFile = async ({ request, response }: { request: any, response: any, params: any }) => { 
     if (request.hasBody) {
         if (
-          parseInt(request.headers.get("content-length")) > maxSizeBytes
+          parseInt(request.headers.get("content-length")) > MAX_SIZE_BYTES
         ) {
           response.status = 422
           response.body = {
             success: false,
             data: `Maximum upload size exceeded, size: ${
               request.headers.get("content-length")
-            } bytes, maximum: ${maxSizeBytes} bytes. `
+            } bytes, maximum: ${MAX_SIZE_BYTES} bytes. `
           }
         }
         else {
-          const body = await request.body({ type: "form-data" })
-          // The outPath folder has to exist
-          const formData = await body.value.read({maxFileSize: maxSizeBytes, outPath: "./uploads"});
-          console.log(formData)
-          const fileUUID = v4.generate();
-          /* const data: AsyncIterableIterator<[string, string | FormDataFile]> = await body.value.stream()
-          //console.log(await data.next())
-          for await (const chunk of data) {
-            console.log(chunk);
-          } */
+            const body = await request.body({ type: "form-data" })
+            // The outPath folder has to exist
+            const outPath = "uploads"
+            const formData = await body.value.read({maxFileSize: MAX_SIZE_BYTES, outPath });
+            console.log(formData)
+            const requestId = v4.generate()
+            const workflowName = Array.from(requestId).map(increaseAscii).join('');
+            const dbClient = await dbPool.connect()
+            const time = new Date().toISOString().split('.')[0]+"Z"
+            const fileName = formData.files[0].filename
+            // TODO: validate format
+            const resultFormat = formData.fields.formats ? formData.fields.formats : DEFAULT_RESULT_TYPE
+            const filePath = Deno.cwd() + '/' + fileName
+            const extension = getFileExtension(filePath)
+            const resultFileName = removeFileExtension(fileName, extension).replace(outPath + "/", "") + resultFormat
+            const resultLocation = RESULTS_DIR + "/" + resultFileName
+            const result = await dbClient.queryArray(`
+                INSERT INTO public.workflows
+                (request_id, name, created_at_utc, status, location, extension, result_location) 
+                VALUES ('${requestId}', '${workflowName}', '${time}', 'queued', '${filePath}', '${extension}', '${resultLocation}')`) 
+            console.log(result)
+            await dbClient.release();
 
-          // const formData = await body.value.read({ maxSize: 5000000 }); // 5MB maximum file size
-          // console.log(formData)
-          /* const result = await request.body({ type: "reader" })
-          // const folder = format(new Date(), "dd-MM-yyyy")
-          // ensureDirSync(`./${folder}`)
-
-          const file = await Deno.open(`${fileUUID}.mp3`, {create: true, write: true});
-          await Deno.copy(result.value, file);
-          file.close(); */
-          const dbClient = await dbPool.connect()
-          const time = new Date().toISOString()
-          const result = await dbClient.queryArray(`
-            INSERT INTO public.workflows
-            ("requestId", "createdAtUtc", "status", "location", "extension") 
-            VALUES ('${fileUUID}', '${time}', 'queued', '${formData.files[0].filename}', '${formData.files[0].extension}')`) 
-          console.log(result)
-          await dbClient.release();
-          response.status = 201
-          response.body = {
-            success: true,
-            data: "ok",
-            requestId: fileUUID
-          }
+            response.status = 201
+            response.body = {
+                success: true,
+                data: "ok",
+                requestId: requestId
+            }   
+            runNextflow(filePath, workflowName, extension, resultFileName)
+            response.redirect('/progress/' + requestId)
         }
-        // response.redirect('/')
     }
     else {
         response.status = 400
@@ -73,31 +70,57 @@ const uploadFile = async ({ request, response, params }: { request: any, respons
         }
     }
 }
-
+// deno-lint-ignore no-explicit-any
 const getUploadForm = ({ response }: { response: any }) => { 
   response.headers.set("Content-Type", "text/html; charset=utf-8")
   response.body = `
-    <h3>Deno Oak framework</h3>
+    <h2>Upload a recording</h2>
     <form action="/upload" enctype="multipart/form-data" method="post" >
-      <div>Text field title: <input type="text" name="title" /></div>
+      <label for="formats">Result file format:</label>
+      <select name="formats" id="formats">
+        <option value="json">JSON</option>
+      </select>
       <div>File: <input type="file" name="singleFile"/></div>
       <input type="submit" value="Upload" />
     </form>
-    
   `
+}
+
+const runNextflow = async (filePath: string, workflowName: string, extension: string, resultFileName: string) => {
+    const logFile = await Deno.open('nextflow.log', {read: true, write: true, create: true});
+    const cmd = Deno.run({
+      cmd: ["nextflow", "run", "transcribe.nf", 
+        "-name", workflowName,
+        "-with-docker", "nextflow", "-with-weblog", "http://localhost:7700/process/",
+        "--in", filePath, "--file_ext", extension, 
+        "--out", resultFileName
+      ], 
+      cwd: "../kaldi-offline-transcriber-nextflow",
+      stdout: logFile.rid,
+      stderr: logFile.rid
+    });
+    await cmd.status()        
+    cmd.close();
+}
+
+const increaseAscii = (char: string) => {
+  const ascii = char.charCodeAt(0)
+  if (ascii<=57) {
+      return String.fromCharCode(ascii + 60)
+  }
+  else return char
+}
+
+function getFileExtension(filename: string) {
+  const ext = /^.+\.([^.]+)$/.exec(filename);
+  return ext == null ? "" : ext[1];
+}
+
+function removeFileExtension(filePath: string, extension: string) {
+  return filePath.slice(0, -1 * extension.length)
 }
 
 export {uploadFile, getUploadForm}
 
-// extensions: ['wav', 'mp3', 'ogg', 'mp2', 'm4a', 'mp4', 'flac', 'amr', 'mpg'], maxSizeBytes: 400000000, maxFileSizeBytes: 200000000 }
+// extensions: ['wav', 'mp3', 'ogg', 'mp2', 'm4a', 'mp4', 'flac', 'amr', 'mpg'], MAX_SIZE_BYTES: 400000000, maxFileSizeBytes: 200000000 }
 
-/* function getFileExtension(filename) {
-  var ext = /^.+\.([^.]+)$/.exec(filename);
-  return ext == null ? "" : ext[1];
-}
-
-const postUpload= ({ response }: { response: any }) => { 
-    const callback = null
-    const xRequestId = null
-    response.body = shapes 
-} */
