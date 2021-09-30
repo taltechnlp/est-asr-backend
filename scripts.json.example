@@ -1,0 +1,32 @@
+{
+  "$schema": "https://deno.land/x/denon@2.4.7/schema.json",
+  "env": {
+    "DB_USER": "aivo",
+    "DB_NAME": "results",
+    "DB_HOSTNAME": "localhost",
+    "DB_PASSWORD": "Parool123",
+    "DB_PORT": "5432",
+    "RESULTS_DIR": "../kaldi-offline-transcriber-nextflow/results"
+  },
+  "scripts": {
+    "start": {
+      "cmd": "deno run app.ts",
+      "unstable": false,
+      "desc": "run my app.ts file",
+      "allow": [
+        "env",
+        "net",
+        "read",
+        "write",
+        "run"
+      ],
+      "env": {
+        "PORT": "7700",
+        "HOST": "127.0.0.1"
+      }
+    }
+  },
+  "logger": {
+    "debug": false
+  }
+}

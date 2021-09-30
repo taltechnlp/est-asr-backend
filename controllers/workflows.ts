@@ -108,7 +108,7 @@ const getWorkflowProgress = async ({ response, params }: { response: any, params
                 <p>Task status: ${taskStatus}</p>
                 </br>
                 <h3>Queue status</h3>
-                <p>Total transcriptions in progress: ${totalStarted}</p>
+                <p>Total in progress: ${totalStarted}</p>
                 <p>Total queued: ${totalQueued}</p>
                 <script>
                 setTimeout(function(){
