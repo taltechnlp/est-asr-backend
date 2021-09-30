@@ -1,0 +1,28 @@
+<head></head>
+<body>
+    <h1>Upload a file to transcribe</h1>
+    <form action="/upload" enctype="multipart/form-data" method="post" >
+        <div>File: <input type="file" name="singleFile"/></div>
+        <input type="submit" value="Upload" />
+    </form>
+
+</body>
+<script>
+    const input = document.querySelector('input[type="file"]')
+    const button = document.querySelector('input[type="submit"]')
+    const onSubmit= () => {
+        const data = new FormData()
+        data.append('singleFile', input.files[0]);
+        fetch("http://localhost:7700/upload", {
+            "body": data,
+            "method": "POST",
+            "referrerPolicy": "strict-origin-when-cross-origin",
+            "mode": "no-cors"   
+        }).then(
+            success => console.log(success) // Handle the success response object
+        ).catch(
+            error => console.log(error) // Handle the error response object
+        );
+    };
+    button.addEventListener('submit', onSubmit, false);
+</script>

@@ -1,6 +1,7 @@
-deno run --allow-env --allow-net --allow-write app.ts 
+denon start
 
 Install PostgreSQL
+E.g. https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/
 
 sudo -i -u postgres
 psql
@@ -10,9 +11,7 @@ exit
 create database results;
 \c results
 
-https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/
+Set username and password and configure it in the script.json file. An example file is provided.
 
-aivo : Parool123
-database : results
-
+Example request from command line:
 curl -i -X POST -F "data=@testimine.txt" http://localhost:7700/upload
