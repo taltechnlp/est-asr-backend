@@ -1,10 +1,16 @@
 interface IWeblog {
     runName: string;
     runId: string;
-    event: "started" | "process_submitted" | "process_started" | "process_completed" | "error" | "completed";
+    event:
+        | "started"
+        | "process_submitted"
+        | "process_started"
+        | "process_completed"
+        | "error"
+        | "completed";
     utcTime: string;
     // trace is only provided for the following events: process_submitted, process_started, process_completed, error
-    trace?: { 
+    trace?: {
         task_id: number;
         process: string;
         name: string;
@@ -26,10 +32,9 @@ interface IWeblog {
                 pendingCount: number;
                 failedCount: number;
                 progressLength: number;
-            }
-        }
+            };
+        };
     };
-    
 }
 
-export type { IWeblog } 
+export type { IWeblog };

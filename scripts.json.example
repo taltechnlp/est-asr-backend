@@ -3,10 +3,10 @@
   "env": {
     "DB_USER": "aivo",
     "DB_NAME": "results",
-    "DB_HOSTNAME": "localhost",
-    "DB_PASSWORD": "Parool123",
+    "DB_HOSTNAME": "127.0.0.1",
+    "DB_PASSWORD": "Pass12345",
     "DB_PORT": "5432",
-    "RESULTS_DIR": "../kaldi-offline-transcriber-nextflow/results"
+    "RESULTS_DIR": "../est-asr-pipeline/results"
   },
   "scripts": {
     "start": {

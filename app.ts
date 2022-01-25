@@ -1,9 +1,9 @@
-import { Application, Context} from 'https://deno.land/x/oak/mod.ts'
-import router from './routes.ts'
+import { Application, Context } from "https://deno.land/x/oak@v10.1.0/mod.ts";
+import router from "./routes.ts";
 
-const env = Deno.env.toObject()
-const HOST = env.HOST 
-const PORT = env.PORT 
+const env = Deno.env.toObject();
+const HOST = env.HOST;
+const PORT = env.PORT;
 
 const app: Application = new Application();
 
@@ -15,8 +15,8 @@ app.use(async (ctx: Context, next: any) => {
     console.log(`${ctx.request.method} ${ctx.request.url} - ${rt}`);
 });
 
-app.use(router.routes())
-app.use(router.allowedMethods())
+app.use(router.routes());
+app.use(router.allowedMethods());
 
-console.log(`Listening on ${HOST}:${PORT} ...`)
-await app.listen(`${HOST}:${PORT}`)
+console.log(`Listening on ${HOST}:${PORT} ...`);
+await app.listen(`${HOST}:${PORT}`);
