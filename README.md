@@ -1,8 +1,8 @@
 # Introduction
 
-This project is an example web API backend server that is meant to be used as a backend service for those who wish to self-host the Estonian ASR system (https://github.com/taltechnlp/est-asr-pipeline) and offer it's consumers a simple API to make transciption requests and also to provide real-time progress information of all active tranciption jobs.
+This project is an example web API backend server that is meant to be used as a backend service for those who wish to self-host the Estonian ASR system (https://github.com/taltechnlp/est-asr-pipeline) and offer its users a simple API to make transciption requests as well as provide real-time progress information about those requests.
 
-This project is built to send transcription requests to the Estonian speech-to-text ASR service which should be deployed as a Docker container. It also retrieves events from the requests and stores a part of the information in its own database. This allows it to provide progress information about specific transcription request and also about all requests in general, enabling it to make predictions about the queue length and expected time of completion. As the queue size depends on the deployment of the ASR service (how many parallel executions are allowed, how long on average does it take to transcribe a minute of speech), all parameters that are used to make estimations are configurable.
+This project is built to send transcription requests to the Estonian speech-to-text ASR service which should be deployed as a Docker container. It also retrieves events from the requests and stores a part of the information in its own database. This allows it to provide progress information about specific transcription request and also about all requests in general, enabling it to make predictions about the queue length and expected time of completion. As the queue length depends on the deployment of the ASR service (how many parallel executions are allowed, how long on average does it take to transcribe a minute of speech), all parameters that are used to make estimations are configurable.
 
 The project depends on Deno and PostgreSQL which are required to be installed locally.
 
@@ -61,5 +61,7 @@ denon start
 An example request from the command line to consume the API:
 
 ```
-curl -i -X POST -F "data=@testimine.txt" http://localhost:7700/upload
+curl -i -X POST -F "data=@audio.mp3" http://localhost:7700/upload
 ```
+# Results
+

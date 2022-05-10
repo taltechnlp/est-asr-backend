@@ -1,6 +1,8 @@
 import { IWeblog } from "../types.ts";
 import { dbPool } from "../database.ts";
 
+const TOTAL_TASKS = 14;
+
 // Add a Nextflow weblog
 // deno-lint-ignore no-explicit-any
 const addWeblog = async ({
@@ -21,11 +23,12 @@ const addWeblog = async ({
         try {
             const body = await request.body();
             /* const result1: string = JSON.stringify(await body.value)
-            const write = Deno.writeTextFile(`./log_1${a}.txt`, result1);
+            
             write.then(() => console.log(`File written ./log_1${a}.txt`));
-            a++;
             console.log(workflow.runId, workflow.event, workflow.utcTime) */
             const workflow: IWeblog = await body.value;
+            /* Deno.writeTextFile(`./log_1${a}.txt`, JSON.stringify(workflow));
+            a++; */
             const dbClient = await dbPool.connect();
             if (workflow.metadata) {
                 const updatedAtUtc = new Date(workflow.utcTime);
@@ -40,10 +43,7 @@ const addWeblog = async ({
                         "failed_count" = ${workflow.metadata?.workflow.stats.failedCount},
                         "progress_length" = ${workflow.metadata?.workflow.stats.progressLength}
                         WHERE "name" = ${workflow.runName}`;
-                console.log(res);
-            }
-            // TODO kirjutada ainult siis kui on taskId on sama või suurem
-            else if (workflow.trace) {
+            } else if (workflow.trace) {
                 const updatedAtUtc = new Date(workflow.utcTime);
                 await dbClient.queryArray`UPDATE public.workflows SET 
                         "run_id" = ${workflow.runId},
@@ -106,7 +106,7 @@ const getWorkflowProgress = async ({
                 ? workflow.running_task_id
                 : 0;
             const taskName = workflow.task_name ? workflow.task_name : "";
-            const progressPerc = ((taskId / 14) * 100).toFixed(1);
+            const progressPerc = ((taskId / TOTAL_TASKS) * 100).toFixed(1);
             const status = workflow.status;
             const taskStatus = workflow.task_status ? workflow.task_status : "";
             response.headers.set("Content-Type", "text/html; charset=utf-8");

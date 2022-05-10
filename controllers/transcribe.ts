@@ -1,5 +1,6 @@
 import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
 import { dbPool, RESULTS_DIR } from "../database.ts";
+const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH");
 
 interface FormDataFile {
     content: string;
@@ -38,7 +39,6 @@ const uploadFile = async ({
                 maxFileSize: MAX_SIZE_BYTES,
                 outPath,
             });
-            console.log(formData);
             const requestId = v4.generate();
             const workflowName = Array.from(requestId)
                 .map(increaseAscii)
@@ -47,24 +47,29 @@ const uploadFile = async ({
             const time = new Date().toISOString().split(".")[0] + "Z";
             const fileName = formData.files[0].filename;
             // TODO: validate format
-            const resultFormat = formData.fields.formats
-                ? formData.fields.formats
-                : DEFAULT_RESULT_TYPE;
             const doMusicDetection =
-                formData.fields.do_music_detection === "yes" ? "yes" : "no";
+                formData.fields.do_music_detection === "true"
+                    ? "true"
+                    : "false";
+            const doLanguageId =
+                formData.fields.do_language_id === "true" ? "true" : "false";
+            const doSpeakerId =
+                formData.fields.do_speaker_id === "true" ? "true" : "false";
             const filePath = Deno.cwd() + "/" + fileName;
             const extension = getFileExtension(filePath);
-            const resultFileName =
-                removeFileExtension(fileName, extension).replace(
-                    outPath + "/",
-                    ""
-                ) + resultFormat;
-            const resultLocation = RESULTS_DIR + "/" + resultFileName;
-            const result = await dbClient.queryArray(`
+            const resultFileName = removeFileExtension(
+                fileName,
+                extension
+            ).replace(outPath + "/", "");
+            // The location of the transcription from current project
+            const resultsDir = RESULTS_DIR || "";
+            const nextflowPath = NEXTFLOW_PATH || "./";
+            const resultLocation =
+                nextflowPath + resultsDir + resultFileName + "/result.json";
+            await dbClient.queryArray(`
                 INSERT INTO public.workflows
-                (request_id, name, created_at_utc, status, location, extension, result_location) 
-                VALUES ('${requestId}', '${workflowName}', '${time}', 'queued', '${filePath}', '${extension}', '${resultLocation}')`);
-            console.log(result);
+                (request_id, name, created_at_utc, status, location, result_location) 
+                VALUES ('${requestId}', '${workflowName}', '${time}', 'queued', '${filePath}', '${resultLocation}')`);
             await dbClient.release();
 
             response.status = 201;
@@ -76,16 +81,15 @@ const uploadFile = async ({
             runNextflow(
                 filePath,
                 workflowName,
-                extension,
-                resultFileName,
-                resultFormat,
-                doMusicDetection
+                resultsDir,
+                doMusicDetection,
+                doSpeakerId,
+                doLanguageId
             );
             response.redirect("/progress/" + requestId);
         }
     } else {
         response.status = 400;
-        console.log("POST failed");
         response.body = {
             success: false,
             msg: "No data included.",
@@ -98,16 +102,12 @@ const getUploadForm = ({ response }: { response: any }) => {
     response.body = `
     <h2>Upload a recording</h2>
     <form action="/upload" enctype="multipart/form-data" method="post" >
-      <label for="formats">Result file format:</label>
-      <select name="formats" id="formats">
-        <option value="json">JSON</option>
-        <option value="trs">TRS</option>
-        <option value="ctm">CTM</option>
-        <option value="txt">TXT</option>
-        <option value="srt">SRT</option>
-      </select><br>
       <label for="do_music_detection">Do music detection?</label>
-      <input type="checkbox" id="do_music_detection" name="do_music_detection" value="yes"><br>
+      <input type="checkbox" id="do_music_detection" name="do_music_detection" value="yes" checked><br>
+      <label for="do_speaker_id">Do speaker identification?</label>
+      <input type="checkbox" id="do_speaker_id" name="do_speaker_id" value="yes" checked><br>
+      <label for="do_language_id">Do language identification?</label>
+      <input type="checkbox" id="do_language_id" name="do_language_id" value="yes" checked><br>
       <div>File: <input type="file" name="singleFile"/></div>
       <input type="submit" value="Upload" />
     </form>
@@ -117,12 +117,12 @@ const getUploadForm = ({ response }: { response: any }) => {
 const runNextflow = async (
     filePath: string,
     workflowName: string,
-    extension: string,
-    resultFileName: string,
-    resultFormat: string,
-    doMusicDetection: string
+    resultsDir: string,
+    doMusicDetection: string,
+    doSpeakerId: string,
+    doLanguageId: string
 ) => {
-    const logFile = await Deno.open("nextflow.log", {
+    const logFile = await Deno.open("deno.log", {
         read: true,
         write: true,
         create: true,
@@ -134,25 +134,22 @@ const runNextflow = async (
             "transcribe.nf",
             "-name",
             workflowName,
-            "-with-dag",
-            "-with-docker",
-            "nextflow",
             "-with-weblog",
             "http://localhost:7700/process/",
             "--in",
             filePath,
-            "--file_ext",
-            extension,
-            "--out",
-            resultFileName,
-            "--out_format",
-            resultFormat,
+            "--out_dir",
+            resultsDir,
             "--do_music_detection",
             doMusicDetection,
             "--do_punctuation",
-            "yes",
+            "true",
+            "--do_speaker_id",
+            doSpeakerId,
+            "--do_language_id",
+            doLanguageId,
         ],
-        cwd: "../kaldi-offline-transcriber-nextflow",
+        cwd: NEXTFLOW_PATH,
         stdout: logFile.rid,
         stderr: logFile.rid,
     });
@@ -173,7 +170,7 @@ function getFileExtension(filename: string) {
 }
 
 function removeFileExtension(filePath: string, extension: string) {
-    return filePath.slice(0, -1 * extension.length);
+    return filePath.slice(0, -1 * (extension.length + 1));
 }
 
 export { uploadFile, getUploadForm };
