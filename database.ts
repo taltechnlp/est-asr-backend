@@ -1,5 +1,7 @@
 import { Pool } from "https://deno.land/x/postgres/mod.ts";
-import "https://deno.land/x/dotenv/load.ts";
+import { dotEnvConfig } from './deps.ts';
+  
+dotEnvConfig({ export: true, safe: true });
 
 const POOL_CONNECTIONS = 5;
 
@@ -10,7 +12,6 @@ const dbPool = new Pool(
         hostname: Deno.env.get("DB_HOSTNAME"),
         password: Deno.env.get("DB_PASSWORD"),
         port: parseInt(Deno.env.get("DB_PORT")!),
-        tls: { enforce: false },
     },
     POOL_CONNECTIONS
 );

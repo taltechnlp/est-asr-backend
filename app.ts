@@ -1,9 +1,12 @@
 import { Application, Context } from "https://deno.land/x/oak@v10.1.0/mod.ts";
 import router from "./routes.ts";
+import { dotEnvConfig } from './deps.ts';
+  
+dotEnvConfig({ export: true, safe: true });
+console.log(dotEnvConfig({}));
 
-const env = Deno.env.toObject();
-const HOST = env.HOST;
-const PORT = env.PORT;
+const HOST = Deno.env.get('APP_HOST');
+const PORT = Deno.env.get('APP_PORT');
 
 const app: Application = new Application();
 

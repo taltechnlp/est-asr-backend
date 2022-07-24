@@ -16,32 +16,38 @@ Note! At the time of writing Deno version 1.16.0 is supported by Denon file watc
 Official installation guide: https://deno.land/manual/getting_started/installation
 Version 1.16.0: https://github.com/denoland/deno/releases/tag/v1.16.0
 
-## Denon
-
-Denon is a file watcher which simplyfies running of the project by utilizing the scripts.json configuration file.
-Note! At the time of writing Denon supports Deno version 1.16.0 and the installation fails with a later Deno version!
-Official installation guide: https://github.com/denosaurs/denon
-
 ## PostgreSQL
 
-Install PostgreSQL: e.g. https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/
+Install PostgreSQL. Either locally e.g. https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/ or using the provided docker-compose.yml.
+The command to spin up the Docker container is (requires Docker to be installed first):
+```
+docker-compose up -d
+``` 
 
 Create a user named postgres
 
 ```
 sudo -i -u postgres
 psql
-\q
-exit
 ```
 
 Create a database calles results:
 
 ```
-\c results
+createdb results
+\q
+exit
 ```
 
-Create a scipts.json file to the root of the project. Set username and password values in the script.json file. An example file called scripts.json.example is provided.
+Finally preform a database migration to create the initial schema.
+
+```
+deno run --allow-net --allow-env --allow-run --allow-read initDb.ts
+```
+
+## Environment variables
+
+Create a .env file to the root of the project. Add environment variables using the .env.example as a reference. The variables in the file .env.defaults can also be overridden in the .env file. Unless all variables defined in .env.example are defined in either .env or .env.defaults, the program will return a MissingEnvVarsError. 
 
 # API Documentation
 
@@ -52,10 +58,10 @@ The server provides the following endpoints:
 
 # Usage
 
-The following starts the server based on the configuration provided in the file scripts.json.
+The following starts the server with all the required privileges.
 
 ```
-denon start
+deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run app.ts
 ```
 
 An example request from the command line to consume the API:

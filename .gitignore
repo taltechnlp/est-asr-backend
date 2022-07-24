@@ -4,3 +4,5 @@ logs/
 scripts.json
 .nextflow*
 nextflow.log
+.env
+deno.log

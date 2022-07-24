@@ -1,6 +1,9 @@
 import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
 import { dbPool, RESULTS_DIR } from "../database.ts";
 const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH");
+const UPLOAD_DIR = Deno.env.get("UPLOAD_DIR");
+const APP_HOST = Deno.env.get("APP_HOST");
+const APP_PORT = Deno.env.get("APP_PORT")
 
 interface FormDataFile {
     content: string;
@@ -13,13 +16,15 @@ interface FormDataFile {
 const MAX_SIZE_BYTES = 2000000000;
 const DEFAULT_RESULT_TYPE = "json";
 
-// deno-lint-ignore no-explicit-any
 const uploadFile = async ({
     request,
     response,
 }: {
+    // deno-lint-ignore no-explicit-any
     request: any;
+    // deno-lint-ignore no-explicit-any
     response: any;
+    // deno-lint-ignore no-explicit-any
     params: any;
 }) => {
     if (request.hasBody) {
@@ -34,7 +39,7 @@ const uploadFile = async ({
         } else {
             const body = await request.body({ type: "form-data" });
             // The outPath folder has to exist
-            const outPath = "uploads";
+            const outPath = UPLOAD_DIR;
             const formData = await body.value.read({
                 maxFileSize: MAX_SIZE_BYTES,
                 outPath,
@@ -61,6 +66,7 @@ const uploadFile = async ({
                 fileName,
                 extension
             ).replace(outPath + "/", "");
+            console.log(outPath, filePath, resultFileName)
             // The location of the transcription from current project
             const resultsDir = RESULTS_DIR || "";
             const nextflowPath = NEXTFLOW_PATH || "./";
@@ -127,21 +133,42 @@ const runNextflow = async (
         write: true,
         create: true,
     });
-    const cmd = Deno.run({
-        cmd: [
+    const command = [
             "nextflow",
             "run",
             "transcribe.nf",
             "-name",
             workflowName,
             "-with-weblog",
-            "http://localhost:7700/process/",
+            `${APP_HOST}:${APP_PORT}/process/`,
             "--in",
             filePath,
             "--out_dir",
             resultsDir,
             "--do_music_detection",
             doMusicDetection,
+            "--do_punctuation",
+            "true",
+            "--do_speaker_id",
+            doSpeakerId,
+            "--do_language_id",
+            doLanguageId,
+        ]
+    console.log(command, NEXTFLOW_PATH)
+    // const cmd = Deno.run({cmd:["ls", "-a"], cwd:"/home/aivo/dev/est-asr-pipeline"})
+    const cmd = Deno.run({
+        cmd: [
+            "/home/aivo/dev/est-asr-pipeline/nextflow",
+            "run",
+            "transcribe.nf",
+            "-name",
+            workflowName,
+            "-with-weblog",
+            `${APP_HOST}:${APP_PORT}/process/`,
+            "--in",
+            filePath,
+            "--out_dir",
+            resultsDir,
             "--do_punctuation",
             "true",
             "--do_speaker_id",
