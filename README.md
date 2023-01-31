@@ -19,19 +19,25 @@ Version 1.16.0: https://github.com/denoland/deno/releases/tag/v1.16.0
 ## PostgreSQL
 
 Install PostgreSQL. Either locally e.g. https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/ or using the provided docker-compose.yml.
+
+### Docker Container Mounted Locally
+
 The command to spin up the Docker container is (requires Docker to be installed first):
 ```
 docker-compose up -d
 ``` 
+The default local IP address then is 0.0.0.0 and the port is 5555. The username, password and database name should be defined in the docker-compose.yml file.
 
-Create a user named postgres
+### Local Database Installation
+
+After installing PostgreSQL locally, also create a user named postgres:
 
 ```
 sudo -i -u postgres
 psql
 ```
 
-Create a database calles results:
+Create a database, e.g. results (can be called whatever, as long as it's defined in the .env file):
 
 ```
 createdb results
@@ -39,7 +45,7 @@ createdb results
 exit
 ```
 
-Finally preform a database migration to create the initial schema.
+Finally preform a database migration to create the initial schema (first set environment variables for Deno, as described below).
 
 ```
 deno run --allow-net --allow-env --allow-run --allow-read initDb.ts
@@ -53,10 +59,63 @@ Create a .env file to the root of the project. Add environment variables using t
 
 The server provides the following endpoints:
 
-1. /upload
-2. /progress
+1. POST /upload
 
-# Usage
+### Request
+
+The POST request should have a multipart/form-data content type and include at least the file. All available fields: 
+
+- do_language_id (default: false). Skips parts of the audio not identified as Estonian.
+- do_speaker_id (default: true). Tries to identify speakers by name. Only works for some Estonian politicians, radio personalities and other celebrities.
+- do_punctuation (default: true). Capitilizes letters and adds punctuation based on Estonian grammar rules.
+
+### Response
+
+A successful response will be HTTP 201 with content-type application/json and the following content: 
+
+  {
+    "success": true,
+    "requestId", "77101bdb-f073-4c74-9137-db3d45b59990"
+  }
+The requestId can then be used to get progress information and the final result from the endpoint GET /progress/{requestID} .
+
+Otherwise there will be an a HTTP 400 error response:
+  {
+      success: false,
+      msg: "No data included.",
+  }
+
+### Example
+
+An example request from the command line to consume the API:
+
+```
+curl -i -X POST -F "data=@audio.mp3" http://localhost:7700/upload
+```
+2. GET /upload
+
+This return HTML and is only useful to manually upload a file and to see what options are available. It submits a form to the POST /upload endpoint.
+
+3. GET /progress/{requestId}
+
+### Request
+The {requestId} should be replaced with the requestId that the POST /upload endpoint returned.
+
+### Response
+Successful in progress response:
+
+  {
+    done: false,
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+    progressPercentage: 50.0,
+    jobStatus: ,
+    currentTaskNumber: 7,
+    currentTaskName: "punctuation",
+    currentTaskStatus: "started",
+    totalJobsQueued: 10,
+    totalJobsStarted: 6
+  }
+### Usage
 
 The following starts the server with all the required privileges.
 
@@ -64,10 +123,21 @@ The following starts the server with all the required privileges.
 deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run app.ts
 ```
 
-An example request from the command line to consume the API:
+4. GET /result/{requestId}
 
-```
-curl -i -X POST -F "data=@audio.mp3" http://localhost:7700/upload
-```
-# Results
+If the processing was succesful, the response is a JSON result.
 
+If the processing has not finished, the response is:
+
+  {
+    done: false,
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990"
+  }
+
+In case the processing failed: 
+  {
+    done: true,
+    success: false,
+    requestId: params.requestId,
+    errorCode: 0 
+  }

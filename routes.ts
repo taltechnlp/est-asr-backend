@@ -3,6 +3,7 @@ import { uploadFile, getUploadForm } from "./controllers/transcribe.ts";
 import {
     addWeblog,
     getWorkflowProgress,
+    getWorkflowProgressHtml,
     getResult,
 } from "./controllers/workflows.ts";
 
@@ -11,7 +12,8 @@ router
     .post("/upload", uploadFile)
     .get("/upload", getUploadForm)
     .get("/progress/:requestId", getWorkflowProgress)
+    .get("/progress-html/:requestId", getWorkflowProgressHtml)
     .get("/result/:requestId", getResult)
-    .post("/process", addWeblog);
-
+    .post("/process", addWeblog)
+    .all("/", addWeblog)
 export default router;
