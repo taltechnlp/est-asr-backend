@@ -6,6 +6,7 @@ import {
     getWorkflowProgressHtml,
     getResult,
 } from "./controllers/workflows.ts";
+import { deleteResults } from "./controllers/deleteResults.ts";
 
 const router = new Router();
 router
@@ -15,5 +16,5 @@ router
     .get("/progress-html/:requestId", getWorkflowProgressHtml)
     .get("/result/:requestId", getResult)
     .post("/process", addWeblog)
-    .all("/", addWeblog)
+    .post("/delete/:requestId", deleteResults)
 export default router;

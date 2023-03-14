@@ -55,11 +55,19 @@ deno run --allow-net --allow-env --allow-run --allow-read initDb.ts
 
 Create a .env file to the root of the project. Add environment variables using the .env.example as a reference. The variables in the file .env.defaults can also be overridden in the .env file. Unless all variables defined in .env.example are defined in either .env or .env.defaults, the program will return a MissingEnvVarsError. 
 
+### Usage
+
+The following starts the server with all the required privileges.
+
+```
+deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run app.ts
+```
+
 # API Documentation
 
 The server provides the following endpoints:
 
-1. POST /upload
+## 1. POST /upload
 
 ### Request
 
@@ -82,7 +90,12 @@ The requestId can then be used to get progress information and the final result 
 Otherwise there will be an a HTTP 400 error response:
   {
       success: false,
-      msg: "No data included.",
+      data: "No data included.",
+  }
+Or a HTTP 422 response: 
+  {
+    success: false,
+    data: "Maximum upload size exceeded .."
   }
 
 ### Example
@@ -92,38 +105,61 @@ An example request from the command line to consume the API:
 ```
 curl -i -X POST -F "data=@audio.mp3" http://localhost:7700/upload
 ```
-2. GET /upload
+## 2. GET /upload
 
 This return HTML and is only useful to manually upload a file and to see what options are available. It submits a form to the POST /upload endpoint.
 
-3. GET /progress/{requestId}
+## 3. GET /progress/{requestId}
 
 ### Request
 The {requestId} should be replaced with the requestId that the POST /upload endpoint returned.
 
 ### Response
-Successful in progress response:
+Successful in progress response, not finished:
 
   {
     done: false,
     requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
     progressPercentage: 50.0,
-    jobStatus: ,
-    currentTaskNumber: 7,
+    jobStatus: "started",
+    currentTaskNumber: "7",
     currentTaskName: "punctuation",
     currentTaskStatus: "started",
     totalJobsQueued: 10,
     totalJobsStarted: 6
   }
-### Usage
 
-The following starts the server with all the required privileges.
+Possible jobStatus values: "started" | "process_submitted" | "process_started"  | "process_completed" | "queued"
 
-```
-deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run app.ts
-```
+Finished:
 
-4. GET /result/{requestId}
+{
+  done: true,
+  success: true,
+  requestId: params.requestId
+}
+
+Unsuccessful result:
+
+{
+  done: true,
+  success: false,
+  requestId: params.requestId,
+  errorCode: 0,
+  errorMessage: "processingFailed"
+}
+
+#### Error responses: 
+
+Not found error HTTP 404
+
+HTTP 404
+{
+  requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+  errorCode: 1
+}
+
+## 4. GET /result/{requestId}
 
 If the processing was succesful, the response is a JSON result.
 
@@ -135,9 +171,62 @@ If the processing has not finished, the response is:
   }
 
 In case the processing failed: 
+
+HTTP 200
   {
     done: true,
     success: false,
-    requestId: params.requestId,
-    errorCode: 0 
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+    errorCode: 0,
+    errorMessage: 
   }
+
+In case of a bad request:
+
+HTTP 400
+  {
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+    errorCode: 2
+  }
+
+In case requestId not found: 
+
+HTTP 404
+{
+  requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+  errorCode: 1
+}
+
+## 5. POST /delete/{requestId}
+
+Deletes the results folder from disk. 
+
+Directory successfully deleted: 
+
+HTTP 200
+  {
+    success: true,
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+  }
+
+In case deleting failed (e.g. directory already deleted): 
+
+HTTP 200
+  {
+    success: false,
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+  }
+
+In case of a bad request:
+
+HTTP 400
+  {
+    requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+  }
+
+In case requestId not found: 
+
+HTTP 404
+{
+  requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
+}

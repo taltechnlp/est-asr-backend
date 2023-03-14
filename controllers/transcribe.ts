@@ -1,9 +1,10 @@
 import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
 import { dbPool, RESULTS_DIR } from "../database.ts";
 const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
-const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH")
-  ? Deno.env.get("NEXTFLOW_PATH")
-  : "nextflow";
+const NEXTFLOW_PATH =
+  (Deno.env.get("NEXTFLOW_PATH")
+    ? Deno.env.get("NEXTFLOW_PATH")
+    : "nextflow") as string;
 const UPLOAD_DIR = Deno.env.get("UPLOAD_DIR");
 const APP_HOST = Deno.env.get("APP_HOST");
 const APP_PORT = Deno.env.get("APP_PORT");
@@ -35,14 +36,13 @@ const uploadFile = async ({
       response.status = 422;
       response.body = {
         success: false,
-        data: `Maximum upload size exceeded, size: ${
+        msg: `Maximum upload size exceeded, size: ${
           request.headers.get(
             "content-length",
           )
         } bytes, maximum: ${MAX_SIZE_BYTES} bytes. `,
       };
     } else {
-      console.log(request.headers);
       const body = await request.body({ type: "form-data" });
       // The outPath folder has to exist
       const outPath = UPLOAD_DIR;
@@ -54,7 +54,6 @@ const uploadFile = async ({
       const workflowName = Array.from(requestId)
         .map(increaseAscii)
         .join("");
-      const dbClient = await dbPool.connect();
       const time = new Date().toISOString().split(".")[0] + "Z";
       const fileName = formData.files[0].filename;
       const doLanguageId = typeof formData.fields.do_language_id === "boolean"
@@ -68,13 +67,15 @@ const uploadFile = async ({
         : true;
       const filePath = Deno.cwd() + "/" + fileName;
       /*const extension = getFileExtension(filePath);
-            const resultFileName = removeFileExtension(
-                fileName,
-                extension
+        const resultFileName = removeFileExtension(
+            fileName,
+            extension
             ).replace(outPath + "/", ""); */
 
       const resultsDir = RESULTS_DIR + "/" + workflowName;
-      const resultLocation = resultsDir + "/result.json";
+      const resultLocation = resultsDir;
+
+      const dbClient = await dbPool.connect();
       await dbClient.queryArray(`
                 INSERT INTO public.workflows
                 (request_id, name, created_at_utc, status, location, result_location) 
@@ -130,11 +131,6 @@ const runNextflow = async (
   doSpeakerId: string,
   doLanguageId: string,
 ) => {
-  const logFile = await Deno.open("deno.log", {
-    read: true,
-    write: true,
-    create: true,
-  });
   const command = [
     NEXTFLOW_PATH,
     "run",
@@ -155,14 +151,18 @@ const runNextflow = async (
     doLanguageId,
   ];
   console.log(command, PIPELINE_DIR);
-  // const cmd = Deno.run({cmd:["ls", "-a"], cwd:"/home/aivo/dev/est-asr-pipeline"})
+  const logFile = await Deno.open("deno.log", {
+    read: true,
+    write: true,
+    create: true,
+  });
   const cmd = Deno.run({
     cmd: command,
     cwd: PIPELINE_DIR,
     stdout: logFile.rid,
     stderr: logFile.rid,
   });
-  await cmd.status();
+  console.log(await cmd.status());
   cmd.close();
 };
 
@@ -182,6 +182,6 @@ function removeFileExtension(filePath: string, extension: string) {
   return filePath.slice(0, -1 * (extension.length + 1));
 }
 
-export { getUploadForm, uploadFile };
+export { getUploadForm, uploadFile};
 
 // extensions: ['wav', 'mp3', 'ogg', 'mp2', 'm4a', 'mp4', 'flac', 'amr', 'mpg'], MAX_SIZE_BYTES: 400000000, maxFileSizeBytes: 200000000 }
