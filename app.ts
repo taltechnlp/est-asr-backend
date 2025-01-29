@@ -15,7 +15,7 @@ const NEXTFLOW_PATH =
   (Deno.env.get("NEXTFLOW_PATH")
     ? Deno.env.get("NEXTFLOW_PATH")
     : "nextflow") as string;
-const dbClient = await dbPool.connect();
+/* const dbClient = await dbPool.connect();
 const unfinished = await dbClient.queryObject<{
   status: string;
   request_id: string;
@@ -23,8 +23,8 @@ const unfinished = await dbClient.queryObject<{
   location: string;
   result_location: string;
 }>(`SELECT status, request_id, run_id, location, result_location
-    FROM public.workflows WHERE status='queued' OR status='started' GROUP BY request_id`);
-const resumeNextflow = async (
+    FROM public.workflows WHERE status='queued' OR status='started' GROUP BY request_id`); */
+/* const resumeNextflow = async (
   sessionId: string,
   location: string,
   resultLocation: string,
@@ -56,9 +56,9 @@ const resumeNextflow = async (
   });
   await cmd.status();
   cmd.close();
-};
+}; */
 
-if (unfinished.rows.length > 0) {
+/* if (unfinished.rows.length > 0) {
   unfinished.rows.forEach((workflow) => {
     // TODO if no run_id, fail or start
     console.log("Resuming", workflow.request_id, workflow.run_id);
@@ -69,7 +69,7 @@ if (unfinished.rows.length > 0) {
     );
   });
 }
-await dbClient.release();
+await dbClient.release(); */
 
 const app: Application = new Application();
 

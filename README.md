@@ -48,7 +48,7 @@ exit
 Finally preform a database migration to create the initial schema (first set environment variables for Deno, as described below).
 
 ```
-deno run --allow-net --allow-env --allow-run --allow-read initDb.ts
+deno run --allow-net --allow-env --allow-run --allow-read --allow-ffi initDb.ts
 ```
 
 ## Environment variables
@@ -60,7 +60,7 @@ Create a .env file to the root of the project. Add environment variables using t
 The following starts the server with all the required privileges.
 
 ```
-deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run app.ts
+deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run --allow-ffi app.ts
 ```
 
 # API Documentation

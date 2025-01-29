@@ -1,5 +1,5 @@
-import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
-import { dbPool, RESULTS_DIR } from "../database.ts";
+import { RESULTS_DIR } from "../database.ts";
+import { db } from "../sqlite.ts";
 const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
 const NEXTFLOW_PATH =
   (Deno.env.get("NEXTFLOW_PATH")
@@ -18,7 +18,6 @@ interface FormDataFile {
 }
 
 const MAX_SIZE_BYTES = 2000000000;
-const DEFAULT_RESULT_TYPE = "json";
 
 const uploadFile = async ({
   request,
@@ -50,10 +49,8 @@ const uploadFile = async ({
         maxFileSize: MAX_SIZE_BYTES,
         outPath,
       });
-      const requestId = v4.generate();
-      const workflowName = Array.from(requestId)
-        .map(increaseAscii)
-        .join("");
+      const requestId = crypto.randomUUID();
+      const workflowName = transformUUIDToPattern(requestId);
       const time = new Date().toISOString().split(".")[0] + "Z";
       const fileName = formData.files[0].filename;
       const doLanguageId = typeof formData.fields.do_language_id === "boolean"
@@ -74,22 +71,62 @@ const uploadFile = async ({
 
       const resultsDir = RESULTS_DIR + "/" + workflowName;
       const resultLocation = resultsDir;
+      console.log(resultsDir, resultLocation);
 
-      const dbClient = await dbPool.connect();
-      await dbClient.queryArray(`
-                INSERT INTO public.workflows
-                (request_id, name, created_at_utc, status, location, result_location) 
-                VALUES ('${requestId}', '${workflowName}', '${time}', 'queued', '${filePath}', '${resultLocation}')`);
-      await dbClient.release();
+      db.prepare(`
+                INSERT INTO workflows 
+                (request_id, name, created_at_utc, status, location, result_location)
+                VALUES (?, ?, ?, ?, ?, ?)
+                `).run(requestId, workflowName, time, "queued", filePath, resultLocation);
+           
 
-      runNextflow(
+      /* runNextflow(
         filePath,
         workflowName,
         resultsDir,
         doPunctuation,
         doSpeakerId,
         doLanguageId,
+      ); */
+      
+      const command_args = [
+        "run",
+        "transcribe.nf",
+        "-name",
+        workflowName,
+        "-with-weblog",
+        `http://${APP_HOST}:${APP_PORT}/process/`,
+        "--in",
+        filePath,
+        "--out_dir",
+        resultsDir,
+        "--do_punctuation",
+        doPunctuation,
+        "--do_speaker_id",
+        doSpeakerId,
+        "--do_language_id",
+        doLanguageId,
+      ];
+      console.log(command_args, PIPELINE_DIR);
+     /*  const logFile = await Deno.open("deno.log", {
+        read: true,
+        write: true,
+        create: true,
+      }); */
+      const command = new Deno.Command(NEXTFLOW_PATH, {
+        args: command_args,
+        stdin: "piped",
+        stdout: "piped",
+        cwd: PIPELINE_DIR
+      });
+      const child = command.spawn();
+      /* child.stdout.pipeTo(
+        Deno.openSync("output.log", { write: true, create: true }).writable,
       );
+      child.stdin.close(); */
+      const status = await child.status;
+      console.log(status, "status");
+
       response.status = 201;
       response.body = {
         success: true,
@@ -131,7 +168,7 @@ const runNextflow = async (
   doSpeakerId: string,
   doLanguageId: string,
 ) => {
-  const command = [
+  const command_args = [
     NEXTFLOW_PATH,
     "run",
     "transcribe.nf",
@@ -150,37 +187,61 @@ const runNextflow = async (
     "--do_language_id",
     doLanguageId,
   ];
-  console.log(command, PIPELINE_DIR);
-  const logFile = await Deno.open("deno.log", {
+  console.log(command_args, PIPELINE_DIR);
+ /*  const logFile = await Deno.open("deno.log", {
     read: true,
     write: true,
     create: true,
+  }); */
+  const command = new Deno.Command(Deno.execPath(), {
+    args: command_args,
+    stdin: "piped",
+    stdout: "piped",
   });
-  const cmd = Deno.run({
-    cmd: command,
-    cwd: PIPELINE_DIR,
-    stdout: logFile.rid,
-    stderr: logFile.rid,
-  });
-  console.log(await cmd.status());
-  cmd.close();
+  const child = command.spawn();
+  child.stdout.pipeTo(
+    Deno.openSync("output.log", { write: true, create: true }).writable,
+  );
+  child.stdin.close();
+  const status = await child.status;
+  console.log(status);
 };
 
-const increaseAscii = (char: string) => {
+function transformUUIDToPattern(uuid: string): string {
+  // Step 1: Remove hyphens from the UUID
+  let transformed = uuid.replace(/-/g, '');
+
+  // Step 2: Ensure the first character is a lowercase letter
+  if (!/^[a-z]/.test(transformed)) {
+      transformed = 'a' + transformed.slice(1); // Replace the first character with 'a' if not a letter
+  }
+
+  // Step 3: Replace any non-alphanumeric character with an underscore (if any)
+  transformed = transformed.replace(/[^a-z\d]/g, '_');
+
+  // Step 4: Truncate or pad the string to match the length requirement (0-79 characters)
+  if (transformed.length > 80) {
+      transformed = transformed.slice(0, 80); // Truncate if too long
+  }
+
+  return transformed;
+}
+
+/* const increaseAscii = (acc:string, char: string) => {
   const ascii = char.charCodeAt(0);
   if (ascii <= 57) {
     return String.fromCharCode(ascii + 60);
   } else return char;
-};
+}; */
 
-function getFileExtension(filename: string) {
+/* function getFileExtension(filename: string) {
   const ext = /^.+\.([^.]+)$/.exec(filename);
   return ext == null ? "" : ext[1];
 }
 
 function removeFileExtension(filePath: string, extension: string) {
   return filePath.slice(0, -1 * (extension.length + 1));
-}
+} */
 
 export { getUploadForm, uploadFile};
 

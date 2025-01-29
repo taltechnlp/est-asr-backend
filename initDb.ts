@@ -2,10 +2,8 @@ import { dotEnvConfig } from './deps.ts';
 dotEnvConfig({ export: true, safe: true });
 import { createTable} from './migrations/initial.ts'
 
-import { dbPool } from './database.ts'
+import { db } from './sqlite.ts'
 
-const dbClient = await dbPool.connect();
+db.prepare(createTable).run();
 
-await dbClient.queryArray(createTable);
-
-await dbClient.release();
+db.close();
