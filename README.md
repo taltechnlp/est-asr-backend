@@ -4,7 +4,7 @@ This project is an example web API backend server that is meant to be used as a 
 
 This project is built to send transcription requests to the Estonian speech-to-text ASR service which should be deployed as a Docker container. It also retrieves events from the requests and stores a part of the information in its own database. This allows it to provide progress information about specific transcription request and also about all requests in general, enabling it to make predictions about the queue length and expected time of completion. As the queue length depends on the deployment of the ASR service (how many parallel executions are allowed, how long on average does it take to transcribe a minute of speech), all parameters that are used to make estimations are configurable.
 
-The project depends on Deno and PostgreSQL which are required to be installed locally.
+The project depends on Deno and SQLite.
 
 # Installation
 
@@ -16,36 +16,11 @@ Note! At the time of writing Deno version 1.16.0 is supported by Denon file watc
 Official installation guide: https://deno.land/manual/getting_started/installation
 Version 1.16.0: https://github.com/denoland/deno/releases/tag/v1.16.0
 
-## PostgreSQL
+## SQLite
 
-Install PostgreSQL. Either locally e.g. https://www.tecmint.com/install-postgresql-and-pgadmin-in-ubuntu/ or using the provided docker-compose.yml.
+The project uses SQLite as its database. The database file will be created automatically in the root of the project.
 
-### Docker Container Mounted Locally
-
-The command to spin up the Docker container is (requires Docker to be installed first):
-```
-docker-compose up -d
-``` 
-The default local IP address then is 0.0.0.0 and the port is 5555. The username, password and database name should be defined in the docker-compose.yml file.
-
-### Local Database Installation
-
-After installing PostgreSQL locally, also create a user named postgres:
-
-```
-sudo -i -u postgres
-psql
-```
-
-Create a database, e.g. results (can be called whatever, as long as it's defined in the .env file):
-
-```
-createdb results
-\q
-exit
-```
-
-Finally preform a database migration to create the initial schema (first set environment variables for Deno, as described below).
+To create the initial schema, run the following command:
 
 ```
 deno run --allow-net --allow-env --allow-run --allow-read --allow-ffi initDb.ts
@@ -53,7 +28,13 @@ deno run --allow-net --allow-env --allow-run --allow-read --allow-ffi initDb.ts
 
 ## Environment variables
 
-Create a .env file to the root of the project. Add environment variables using the .env.example as a reference. The variables in the file .env.defaults can also be overridden in the .env file. Unless all variables defined in .env.example are defined in either .env or .env.defaults, the program will return a MissingEnvVarsError. 
+Create a .env file to the root of the project. The following variables are required:
+
+- `APP_HOST`: The host for the application.
+- `APP_PORT`: The port for the application.
+- `PIPELINE_DIR`: The directory of the Nextflow pipeline.
+- `NEXTFLOW_PATH`: The path to the Nextflow executable.
+- `UPLOAD_DIR`: The directory where uploaded files will be stored.
 
 ### Usage
 

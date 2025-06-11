@@ -1,75 +1,75 @@
 import { Application, Context } from "https://deno.land/x/oak@v10.1.0/mod.ts";
 import router from "./routes.ts";
 import { dotEnvConfig } from "./deps.ts";
-import { dbPool } from "./database.ts";
-import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
+import { db } from "./sqlite.ts";
+import { resolvePath } from "./utils/paths.ts";
 
-dotEnvConfig({ export: true, safe: true });
+dotEnvConfig({ export: true });
 
 const HOST = Deno.env.get("APP_HOST");
 const PORT = Deno.env.get("APP_PORT");
 
 // Check on unfinished transcription workflows after restart
-const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
-const NEXTFLOW_PATH =
-  (Deno.env.get("NEXTFLOW_PATH")
-    ? Deno.env.get("NEXTFLOW_PATH")
-    : "nextflow") as string;
-/* const dbClient = await dbPool.connect();
-const unfinished = await dbClient.queryObject<{
-  status: string;
-  request_id: string;
-  run_id: string;
-  location: string;
-  result_location: string;
-}>(`SELECT status, request_id, run_id, location, result_location
-    FROM public.workflows WHERE status='queued' OR status='started' GROUP BY request_id`); */
-/* const resumeNextflow = async (
+const PIPELINE_DIR = resolvePath(Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline");
+const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
+    
+const unfinished = db.prepare("SELECT status, request_id, run_id, location, result_location FROM workflows WHERE status='queued' OR status='started' GROUP BY request_id").all();
+
+const resumeNextflow = async (
   sessionId: string,
   location: string,
   resultLocation: string,
 ) => {
-  const command = [
-    NEXTFLOW_PATH,
-    "run",
-    "transcribe.nf",
-    "-resume",
-    sessionId,
-    "-with-weblog",
-    `http://${HOST}:${PORT}/process/`,
-    "--in",
-    location,
-    "--out_dir",
-    resultLocation,
-  ];
-  console.log(command, PIPELINE_DIR);
-  const logFile = await Deno.open("deno.log", {
-    read: true,
-    write: true,
-    create: true,
-  });
-  const cmd = Deno.run({
-    cmd: command,
-    cwd: PIPELINE_DIR,
-    stdout: logFile.rid,
-    stderr: logFile.rid,
-  });
-  await cmd.status();
-  cmd.close();
-}; */
+  try {
+    console.log("Using pipeline directory:", PIPELINE_DIR);
+    const command = new Deno.Command(NEXTFLOW_PATH, {
+      args: [
+      "run",
+      "transcribe.nf",
+      "-resume",
+      sessionId,
+      "-with-weblog",
+      `http://${HOST}:${PORT}/process/`,
+      "--in",
+      location,
+      "--out_dir",
+      resultLocation,
+      ],
+      stdin: "piped",
+      stdout: "piped",
+      cwd: PIPELINE_DIR
+    });
+    const child = command.spawn();
+    const status = await child.status;
+    console.log("Resumed workflow", sessionId, "status", status);
+  } catch (error) {
+    if (error.message.includes("Failed to spawn") || error.message.includes("No such cwd")) {
+      console.error("\n=== Nextflow Error ===");
+      console.error("Nextflow could not be found or the pipeline directory is incorrect.");
+      console.error("\nPlease ensure that:");
+      console.error("1. Nextflow is installed and available in your PATH, or");
+      console.error("2. Set the NEXTFLOW_PATH environment variable to the correct path");
+      console.error("3. The pipeline directory exists at:", PIPELINE_DIR);
+      console.error("\nInstallation instructions can be found in the est-asr-pipeline project README.");
+      console.error("===================\n");
+    }
+    throw error;
+  }
+};
 
-/* if (unfinished.rows.length > 0) {
-  unfinished.rows.forEach((workflow) => {
+if (unfinished.length > 0) {
+  unfinished.forEach((workflow) => {
     // TODO if no run_id, fail or start
     console.log("Resuming", workflow.request_id, workflow.run_id);
     resumeNextflow(
       workflow.run_id,
       workflow.location,
       workflow.result_location,
-    );
+    ).catch(error => {
+      console.error("Failed to resume workflow:", error.message);
+    });
   });
 }
-await dbClient.release(); */
 
 const app: Application = new Application();
 

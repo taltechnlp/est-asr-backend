@@ -1,66 +1,60 @@
-import { v4 } from "https://deno.land/std@0.97.0/uuid/mod.ts";
-import { dbPool, RESULTS_DIR } from "../database.ts";
-const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
-const NEXTFLOW_PATH =
-  (Deno.env.get("NEXTFLOW_PATH")
-    ? Deno.env.get("NEXTFLOW_PATH")
-    : "nextflow") as string;
+import { db } from "../sqlite.ts";
+import { resolvePath } from "../utils/paths.ts";
+import { v4 as uuidv4 } from "std/uuid/mod.ts";
+
+const PIPELINE_DIR = resolvePath(Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline");
+const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
 const UPLOAD_DIR = Deno.env.get("UPLOAD_DIR");
 const APP_HOST = Deno.env.get("APP_HOST");
 const APP_PORT = Deno.env.get("APP_PORT");
 
 const deleteResults = async ({
+  request,
   response,
   params,
 }: {
+  request: any;
   response: any;
   params: any;
 }) => {
-  if (params && params.requestId) {
-    const dbClient = await dbPool.connect();
-    const result = await dbClient.queryObject<{
-      result_location: string;
-    }>(
-      `SELECT result_location FROM public.workflows WHERE request_id = '${params.requestId}'`,
-    );
-    await dbClient.release();
-    if (result.rowCount && result.rowCount > 0) {
-      const workflow = result.rows[0];
-      const command = [
-        "rm",
-        workflow.result_location,
-        "-dr",
-      ];
-      console.log(command, PIPELINE_DIR);
-      const logFile = await Deno.open("deno_delete.log", {
-        read: true,
-        write: true,
-        create: true,
-      });
-      const cmd = Deno.run({
-        cmd: command,
-        cwd: PIPELINE_DIR,
-        stdout: logFile.rid,
-        stderr: logFile.rid,
-      });
-      const deleteResult = await cmd.status();
-      console.log("Tried to delete results", deleteResult, params.requestId)
-      cmd.close();
+  const requestId = params.requestId;
+  const workflow = db.prepare(`
+        SELECT * FROM workflows
+        WHERE request_id = ?
+        `).get(requestId);
+
+  if (workflow) {
+    const resultLocation = workflow.result_location;
+    const filePath = workflow.location;
+    const resultsDir = resolvePath(resultLocation);
+    const fileDir = resolvePath(filePath);
+
+    try {
+      await Deno.remove(resultsDir, { recursive: true });
+      await Deno.remove(fileDir);
+      db.prepare(`
+            DELETE FROM workflows
+            WHERE request_id = ?
+            `).run(requestId);
+      response.status = 200;
       response.body = {
-        success: deleteResult.success,
-        requestId: params.requestId,
+        success: true,
+        msg: "Results deleted successfully.",
       };
-    } else {
-      response.status = 404;
+    } catch (error) {
+      response.status = 500;
       response.body = {
-        requestId: params.requestId,
+        success: false,
+        msg: "Error deleting results.",
+        error: error.message,
       };
     }
   } else {
-    response.status = 400;
-      response.body = {
-        requestId: params.requestId,
-      };
+    response.status = 404;
+    response.body = {
+      success: false,
+      msg: "Results not found.",
+    };
   }
 };
 export { deleteResults };

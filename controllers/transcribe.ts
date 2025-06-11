@@ -1,10 +1,9 @@
-import { RESULTS_DIR } from "../database.ts";
 import { db } from "../sqlite.ts";
-const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
-const NEXTFLOW_PATH =
-  (Deno.env.get("NEXTFLOW_PATH")
-    ? Deno.env.get("NEXTFLOW_PATH")
-    : "nextflow") as string;
+import { resolvePath, ensureDir } from "../utils/paths.ts";
+import { v4 as uuidv4 } from "std/uuid/mod.ts";
+
+const PIPELINE_DIR = resolvePath(Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline");
+const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
 const UPLOAD_DIR = Deno.env.get("UPLOAD_DIR");
 const APP_HOST = Deno.env.get("APP_HOST");
 const APP_PORT = Deno.env.get("APP_PORT");
@@ -43,8 +42,9 @@ const uploadFile = async ({
       };
     } else {
       const body = await request.body({ type: "form-data" });
-      // The outPath folder has to exist
-      const outPath = UPLOAD_DIR;
+      const outPath = resolvePath(UPLOAD_DIR || "uploads");
+      await ensureDir(outPath);
+      
       const formData = await body.value.read({
         maxFileSize: MAX_SIZE_BYTES,
         outPath,
@@ -62,14 +62,8 @@ const uploadFile = async ({
       const doPunctuation = typeof formData.fields.do_punctuation === "boolean"
         ? formData.fields.do_punctuation
         : true;
-      const filePath = Deno.cwd() + "/" + fileName;
-      /*const extension = getFileExtension(filePath);
-        const resultFileName = removeFileExtension(
-            fileName,
-            extension
-            ).replace(outPath + "/", ""); */
-
-      const resultsDir = RESULTS_DIR + "/" + workflowName;
+      const filePath = resolvePath(`${outPath}/${fileName}`);
+      const resultsDir = resolvePath(`${outPath}/${workflowName}`);
       const resultLocation = resultsDir;
       console.log(resultsDir, resultLocation);
 
@@ -79,15 +73,14 @@ const uploadFile = async ({
                 VALUES (?, ?, ?, ?, ?, ?)
                 `).run(requestId, workflowName, time, "queued", filePath, resultLocation);
            
-
-      /* runNextflow(
+      runNextflow(
         filePath,
         workflowName,
         resultsDir,
         doPunctuation,
         doSpeakerId,
         doLanguageId,
-      ); */
+      );
       
       const command_args = [
         "run",
@@ -101,11 +94,11 @@ const uploadFile = async ({
         "--out_dir",
         resultsDir,
         "--do_punctuation",
-        doPunctuation,
+        String(doPunctuation),
         "--do_speaker_id",
-        doSpeakerId,
+        String(doSpeakerId),
         "--do_language_id",
-        doLanguageId,
+        String(doLanguageId),
       ];
       console.log(command_args, PIPELINE_DIR);
      /*  const logFile = await Deno.open("deno.log", {
@@ -164,47 +157,50 @@ const runNextflow = async (
   filePath: string,
   workflowName: string,
   resultsDir: string,
-  doPunctuation: string,
-  doSpeakerId: string,
-  doLanguageId: string,
+  doPunctuation: boolean,
+  doSpeakerId: boolean,
+  doLanguageId: boolean,
 ) => {
-  const command_args = [
-    NEXTFLOW_PATH,
-    "run",
-    "transcribe.nf",
-    "-name",
-    workflowName,
-    "-with-weblog",
-    `http://${APP_HOST}:${APP_PORT}/process/`,
-    "--in",
-    filePath,
-    "--out_dir",
-    resultsDir,
-    "--do_punctuation",
-    doPunctuation,
-    "--do_speaker_id",
-    doSpeakerId,
-    "--do_language_id",
-    doLanguageId,
-  ];
-  console.log(command_args, PIPELINE_DIR);
- /*  const logFile = await Deno.open("deno.log", {
-    read: true,
-    write: true,
-    create: true,
-  }); */
-  const command = new Deno.Command(Deno.execPath(), {
-    args: command_args,
-    stdin: "piped",
-    stdout: "piped",
-  });
-  const child = command.spawn();
-  child.stdout.pipeTo(
-    Deno.openSync("output.log", { write: true, create: true }).writable,
-  );
-  child.stdin.close();
-  const status = await child.status;
-  console.log(status);
+  try {
+    const command_args = [
+      "run",
+      "transcribe.nf",
+      "-with-weblog",
+      `http://${APP_HOST}:${APP_PORT}/process/`,
+      "--in",
+      filePath,
+      "--out_dir",
+      resultsDir,
+      "--do_punctuation",
+      doPunctuation.toString(),
+      "--do_speaker_id",
+      doSpeakerId.toString(),
+      "--do_language_id",
+      doLanguageId.toString(),
+    ];
+    console.log(command_args, PIPELINE_DIR);
+    const command = new Deno.Command(NEXTFLOW_PATH, {
+      args: command_args,
+      stdin: "piped",
+      stdout: "piped",
+      cwd: PIPELINE_DIR
+    });
+    const child = command.spawn();
+    const status = await child.status;
+    console.log("Started workflow", workflowName, "status", status);
+  } catch (error) {
+    if (error.message.includes("Failed to spawn") || error.message.includes("No such cwd")) {
+      console.error("\n=== Nextflow Error ===");
+      console.error("Nextflow could not be found or the pipeline directory is incorrect.");
+      console.error("\nPlease ensure that:");
+      console.error("1. Nextflow is installed and available in your PATH, or");
+      console.error("2. Set the NEXTFLOW_PATH environment variable to the correct path");
+      console.error("3. The pipeline directory exists at:", PIPELINE_DIR);
+      console.error("\nInstallation instructions can be found in the est-asr-pipeline project README.");
+      console.error("===================\n");
+    }
+    throw error;
+  }
 };
 
 function transformUUIDToPattern(uuid: string): string {

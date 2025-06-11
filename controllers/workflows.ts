@@ -1,10 +1,7 @@
 import { IWeblog } from "../types.ts";
-import { dbPool } from "../database.ts";
+import { db } from "../sqlite.ts";
 const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
-const NEXTFLOW_PATH =
-  (Deno.env.get("NEXTFLOW_PATH")
-    ? Deno.env.get("NEXTFLOW_PATH")
-    : "nextflow") as string;
+const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
 const TOTAL_TASKS = 13;
 const errorCodes = {
     0: "processingFailed",
@@ -37,92 +34,94 @@ const addWeblog = async ({
       console.log(workflow.runId, workflow.event, workflow.utcTime)
       /* Deno.writeTextFile(`./log_1${a}.json`, JSON.stringify(workflow));
       a++; */
-      const dbClient = await dbPool.connect();
       if (workflow.metadata) {
-        const updatedAtUtc = new Date(workflow.utcTime);
-        // Check whether a run_id already exists (is not the first weblog message to arrive.)
-        const matchingWorkflow = await dbClient.queryObject<{
-          name: string;
-          count: number;
-        }>(`SELECT name
-            FROM public.workflows WHERE run_id = '${workflow.runId}'`);
-        let res;
-        // Workflow has a runId
-        if (matchingWorkflow.rowCount && matchingWorkflow.rowCount > 0) {
+        const updatedAtUtc = new Date(workflow.utcTime).toISOString();
+        const matchingWorkflow = db.prepare(`SELECT name FROM workflows WHERE run_id = ?`).get(workflow.runId);
+
+        if (matchingWorkflow) {
           // Delete temp files from work directory
-        const command = [
-          NEXTFLOW_PATH,
-          "clean",
-          workflow.runId,
-          "-k",
-          "-f"
-        ];
-        console.log(command, PIPELINE_DIR);
-        const logFile = await Deno.open("deno.log", {
-          read: true,
-          write: true,
-          create: true,
-        });
-        const cmd = Deno.run({
-          cmd: command,
-          cwd: PIPELINE_DIR,
-          stdout: logFile.rid,
-          stderr: logFile.rid,
-        });
-        console.log(await cmd.status());
-        cmd.close();
+          const command = new Deno.Command(NEXTFLOW_PATH, {
+            args: ["clean", workflow.runId, "-k", "-f"],
+            cwd: PIPELINE_DIR
+          });
+          await command.output();
+          
           // Save event
-          res = await dbClient.queryArray`UPDATE public.workflows SET 
-                        "status" = ${workflow.event},
-                        "updated_at_utc" = ${updatedAtUtc},
-                        "succeeded_count" = ${workflow.metadata?.workflow.stats.succeededCount},
-                        "running_count" = ${workflow.metadata?.workflow.stats.runningCount},
-                        "pending_count" = ${workflow.metadata?.workflow.stats.pendingCount},
-                        "failed_count" = ${workflow.metadata?.workflow.stats.failedCount},
-                        "progress_length" = ${workflow.metadata?.workflow.stats.progressLength}
-                        WHERE "run_id" = ${workflow.runId}`;
+          db.prepare(`UPDATE workflows SET 
+                        "status" = ?,
+                        "updated_at_utc" = ?,
+                        "succeeded_count" = ?,
+                        "running_count" = ?,
+                        "pending_count" = ?,
+                        "failed_count" = ?,
+                        "progress_length" = ?
+                        WHERE "run_id" = ?`).run(
+                          workflow.event,
+                          updatedAtUtc,
+                          workflow.metadata?.workflow.stats.succeededCount,
+                          workflow.metadata?.workflow.stats.runningCount,
+                          workflow.metadata?.workflow.stats.pendingCount,
+                          workflow.metadata?.workflow.stats.failedCount,
+                          workflow.metadata?.workflow.stats.progressLength,
+                          workflow.runId
+                        );
         } else {
-          res = await dbClient.queryArray`UPDATE public.workflows SET 
-          "run_id" = ${workflow.runId},
-          "status" = ${workflow.event},
-          "updated_at_utc" = ${updatedAtUtc},
-          "succeeded_count" = ${workflow.metadata?.workflow.stats.succeededCount},
-          "running_count" = ${workflow.metadata?.workflow.stats.runningCount},
-          "pending_count" = ${workflow.metadata?.workflow.stats.pendingCount},
-          "failed_count" = ${workflow.metadata?.workflow.stats.failedCount},
-          "progress_length" = ${workflow.metadata?.workflow.stats.progressLength}
-          WHERE "name" = ${workflow.runName}`;
+          db.prepare(`UPDATE workflows SET 
+          "run_id" = ?,
+          "status" = ?,
+          "updated_at_utc" = ?,
+          "succeeded_count" = ?,
+          "running_count" = ?,
+          "pending_count" = ?,
+          "failed_count" = ?,
+          "progress_length" = ?
+          WHERE "name" = ?`).run(
+            workflow.runId,
+            workflow.event,
+            updatedAtUtc,
+            workflow.metadata?.workflow.stats.succeededCount,
+            workflow.metadata?.workflow.stats.runningCount,
+            workflow.metadata?.workflow.stats.pendingCount,
+            workflow.metadata?.workflow.stats.failedCount,
+            workflow.metadata?.workflow.stats.progressLength,
+            workflow.runName
+          );
         }
-        res.handleCommandComplete = (e => console.log(e))
       } else if (workflow.trace) {
-        // Check whether a run_id already exists (is not the first weblog message to arrive.)
-        const matchingWorkflow = await dbClient.queryObject<{
-          name: string;
-          count: number;
-        }>(`SELECT name
-            FROM public.workflows WHERE run_id = '${workflow.runId}'`);
-        const updatedAtUtc = new Date(workflow.utcTime);
-        let res;
-        if (matchingWorkflow.rowCount && matchingWorkflow.rowCount > 0) {
-          res = await dbClient.queryArray`UPDATE public.workflows SET 
-            task_name = ${workflow.trace.name},
-            "running_task_id" = ${workflow.trace.task_id}, 
-            "task_status" = ${workflow.event}, 
-            "updated_at_utc" = ${updatedAtUtc}
-            WHERE "run_id" = ${workflow.runId}`;
+        const updatedAtUtc = new Date(workflow.utcTime).toISOString();
+        const matchingWorkflow = db.prepare(`SELECT name FROM workflows WHERE run_id = ?`).get(workflow.runId);
+
+        if (matchingWorkflow) {
+          db.prepare(`UPDATE workflows SET 
+            task_name = ?,
+            "running_task_id" = ?, 
+            "task_status" = ?, 
+            "updated_at_utc" = ?
+            WHERE "run_id" = ?`).run(
+              workflow.trace.name,
+              workflow.trace.task_id,
+              workflow.event,
+              updatedAtUtc,
+              workflow.runId
+            );
         } else {
-          res = await dbClient.queryArray`UPDATE public.workflows SET 
-          "run_id" = ${workflow.runId},
-          task_name = ${workflow.trace.name},
-          "running_task_id" = ${workflow.trace.task_id}, 
-          "task_status" = ${workflow.event}, 
-          "updated_at_utc" = ${updatedAtUtc}
-          WHERE "name" = ${workflow.runName}`;
+          db.prepare(`UPDATE workflows SET 
+          "run_id" = ?,
+          task_name = ?,
+          "running_task_id" = ?, 
+          "task_status" = ?, 
+          "updated_at_utc" = ?
+          WHERE "name" = ?`).run(
+            workflow.runId,
+            workflow.trace.name,
+            workflow.trace.task_id,
+            workflow.event,
+            updatedAtUtc,
+            workflow.runName
+          );
         }
-        res.handleCommandComplete = (e => console.log(e))
       }
 
-      await dbClient.release();
       response.status = 201;
       response.body = {
         success: true,
@@ -148,26 +147,20 @@ const getWorkflowProgressHtml = async ({
   params: any;
 }) => {
   if (params && params.requestId) {
-    const dbClient = await dbPool.connect();
-    const result = await dbClient.queryObject(
-      `SELECT running_task_id, status, task_status, task_name, failed_count FROM public.workflows WHERE request_id = '${params.requestId}'`,
-    );
-    const totalStatuses = await dbClient.queryObject<{
-      status: string;
-      count: number;
-    }>(`SELECT status, COUNT (status)
-        FROM public.workflows WHERE status='queued' OR status='started' GROUP BY status`);
-    await dbClient.release();
-    const totalQueued = totalStatuses.rows.find(
+    const result = db.prepare(`SELECT running_task_id, status, task_status, task_name, failed_count FROM workflows WHERE request_id = ?`).get(params.requestId);
+    
+    const totalStatuses = db.prepare(`SELECT status, COUNT (status) as count FROM workflows WHERE status='queued' OR status='started' GROUP BY status`).all();
+    
+    const totalQueued = totalStatuses.find(
       (element) => element.status === "queued",
     );
     const count = totalQueued ? totalQueued.count : 0;
-    let totalStarted: any = totalStatuses.rows.find(
+    let totalStarted: any = totalStatuses.find(
       (element) => element.status === "started",
     );
     totalStarted = totalStarted ? totalStarted.count : 0;
-    // deno-lint-ignore no-explicit-any
-    const workflow: any = result.rows[0];
+    
+    const workflow: any = result;
     if (workflow) {
       const taskId: number = workflow.running_task_id
         ? workflow.running_task_id
@@ -225,26 +218,20 @@ const getWorkflowProgress = async ({
   params: any;
 }) => {
   if (params && params.requestId) {
-    const dbClient = await dbPool.connect();
-    const result = await dbClient.queryObject(
-      `SELECT running_task_id, status, task_status, task_name, failed_count FROM public.workflows WHERE request_id = '${params.requestId}'`,
-    );
-    const totalStatuses = await dbClient.queryObject<{
-      status: string;
-      count: number;
-    }>(`SELECT status, COUNT (status)
-        FROM public.workflows WHERE status='queued' OR status='started' GROUP BY status`);
-    await dbClient.release();
-    const queued = totalStatuses.rows.find(
+    const result = db.prepare(`SELECT running_task_id, status, task_status, task_name, failed_count FROM workflows WHERE request_id = ?`).get(params.requestId);
+
+    const totalStatuses = db.prepare(`SELECT status, COUNT (status) as count FROM workflows WHERE status='queued' OR status='started' GROUP BY status`).all();
+    
+    const queued = totalStatuses.find(
       (element) => element.status === "queued",
     );
     const totalQueued = queued ? Number(queued.count) : 0;
-    const started = totalStatuses.rows.find(
+    const started = totalStatuses.find(
       (element) => element.status === "started",
     );
     const totalStarted = started ? Number(started.count) : 0;
-    // deno-lint-ignore no-explicit-any
-    const workflow: any = result.rows[0];
+    
+    const workflow: any = result;
     if (workflow) {
       const taskId: number = workflow.running_task_id
         ? workflow.running_task_id
@@ -252,20 +239,21 @@ const getWorkflowProgress = async ({
       const taskName = workflow.task_name ? workflow.task_name : "";
       const progressPerc = ((taskId / TOTAL_TASKS) * 100).toFixed(1);
       const status = workflow.status;
-      const taskStatus = workflow.task_status ? workflow.task_status : "";
-      if (workflow.failed_count && workflow.failed_count > 0) {
+      const taskStatus = workflow.task_status;
+      
+      if (status === "completed") {
+        response.body = {
+          done: true,
+          success: true,
+          requestId: params.requestId,
+        };
+      } else if (workflow.failed_count && workflow.failed_count > 0) {
         response.body = {
           done: true,
           success: false,
           requestId: params.requestId,
           errorCode: 0,
-          errorMessage: errorCodes[0]
-        };
-      } else if (status === "completed") {
-        response.body = {
-          done: true,
-          success: true,
-          requestId: params.requestId,
+          errorMessage: "processingFailed",
         };
       } else {
         response.body = {
@@ -276,30 +264,22 @@ const getWorkflowProgress = async ({
           currentTaskNumber: taskId,
           currentTaskName: taskName,
           currentTaskStatus: taskStatus,
-          totalJobsQueued: Number(totalQueued),
-          totalJobsStarted: Number(totalStarted),
+          totalJobsQueued: totalQueued,
+          totalJobsStarted: totalStarted,
         };
       }
     } else {
-      response.headers.set("Content-Type", "text/html; charset=utf-8");
+      response.status = 404;
       response.body = {
         requestId: params.requestId,
         errorCode: 1,
-        errorMessage: errorCodes[1]
       };
-      response.status = 404;
     }
   } else {
     response.status = 400;
-    response.body = {
-      requestId: params.requestId,
-      errorCode: 2,
-      errorMessage: errorCodes[2]
-    };
   }
 };
 
-// deno-lint-ignore no-explicit-any
 const getResult = async ({
   response,
   params,
@@ -308,33 +288,41 @@ const getResult = async ({
   params: any;
 }) => {
   if (params && params.requestId) {
-    const dbClient = await dbPool.connect();
-    const result = await dbClient.queryObject(
-      `SELECT result_location, status, run_id FROM public.workflows WHERE request_id = '${params.requestId}'`,
-    );
-    await dbClient.release();
-    // deno-lint-ignore no-explicit-any
-    const workflow: any = result.rows[0];
+    const workflow = db.prepare(`SELECT status, result_location, failed_count FROM workflows WHERE request_id = ?`).get(params.requestId);
+
     if (workflow) {
-      const status = workflow.status;
-      const resultLocation: string = workflow.result_location + "/result.json";
       if (workflow.failed_count && workflow.failed_count > 0) {
         response.body = {
           done: true,
           success: false,
           requestId: params.requestId,
           errorCode: 0,
+          errorMessage: "processingFailed"
         };
-      } else if (status === "completed") {
-        response.headers.set("Content-Type", "application/json");
-        const decoder = new TextDecoder("utf-8");
-        const result = JSON.parse(decoder.decode(Deno.readFileSync(resultLocation)));
-        response.body = {
-          done: true,
-          success: true,
-          requestId: params.requestId,
-          result: result
-        };
+      }
+      else if (workflow.status === "completed") {
+        const resultPath = `${workflow.result_location}/result.json`;
+        try {
+          const file = await Deno.readFile(resultPath);
+          const decoder = new TextDecoder("utf-8");
+          const result = JSON.parse(decoder.decode(file));
+          response.body = {
+            done: true,
+            success: true,
+            requestId: params.requestId,
+            result: result
+          };
+          response.headers.set("Content-Type", "application/json");
+        } catch (_e) {
+          response.status = 500;
+          response.body = {
+            done: true,
+            success: false,
+            requestId: params.requestId,
+            errorCode: 0,
+            errorMessage: "Result file not found.",
+          };
+        }
       } else {
         response.body = {
           done: false,
@@ -342,12 +330,19 @@ const getResult = async ({
         };
       }
     } else {
-      response.headers.set("Content-Type", "text/html; charset=utf-8");
       response.status = 404;
+      response.body = {
+        requestId: params.requestId,
+        errorCode: 1,
+      };
     }
   } else {
     response.status = 400;
+    response.body = {
+      requestId: params.requestId,
+      errorCode: 2,
+    };
   }
 };
 
-export { addWeblog, getResult, getWorkflowProgress, getWorkflowProgressHtml };
+export { addWeblog, getWorkflowProgress, getWorkflowProgressHtml, getResult };
