@@ -1,7 +1,7 @@
 <head></head>
 <body>
     <h1>Upload a file to transcribe</h1>
-    <form action="/upload" enctype="multipart/form-data" method="post" id="uploadForm">
+    <form action="/upload" enctype="multipart/form-data" method="post" >
         <label for="do_speaker_id">Do speaker identification?</label>
         <input type="checkbox" id="do_speaker_id" name="do_speaker_id" value="yes" checked><br>
         <label for="do_language_id">Do language identification?</label>
@@ -14,23 +14,25 @@
 
 </body>
 <script>
-    const form = document.getElementById('uploadForm');
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const formData = new FormData(form);
+    const input = document.querySelector('input[type="file"]')
+    const button = document.querySelector('input[type="submit"]')
+    const onSubmit= () => {
+        const data = new FormData()
+        data.append('singleFile', input.files[0]);
         fetch("http://localhost:7700/upload", {
-            method: "POST",
-            body: formData
-        }).then(response => {
-            if (response.redirected) {
-                window.location.href = response.url;
-            } else {
-                return response.json().then(data => {
-                    if (data.redirect) {
-                        window.location.href = data.redirect;
-                    }
-                });
+            "body": data,
+            "method": "POST",
+            "referrerPolicy": "strict-origin-when-cross-origin",
+            "mode": "no-cors"   
+        }).then(
+            success => {
+                if (success.redirect) {
+                    window.location.href = success.redirect;
+                }
             }
-        }).catch(error => console.log(error));
-    });
+        ).catch(
+            error => console.log(error)
+        );
+    };
+    button.addEventListener('submit', onSubmit, false);
 </script>

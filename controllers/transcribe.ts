@@ -1,6 +1,11 @@
 import { db } from "../sqlite.ts";
 import { resolvePath, ensureDir } from "../utils/paths.ts";
 import { v4 as uuidv4 } from "std/uuid/mod.ts";
+import { dotEnvConfig } from "../deps.ts";
+
+// Ensure environment variables are loaded
+dotEnvConfig({ path: ".env.defaults", export: true });
+dotEnvConfig({ path: ".env", export: true });
 
 const pipelineDirEnv = Deno.env.get("PIPELINE_DIR");
 console.log("DEBUG: PIPELINE_DIR from env is", pipelineDirEnv);
