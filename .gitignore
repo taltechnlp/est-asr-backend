@@ -7,3 +7,4 @@ nextflow.log
 .env
 deno.log
 deno_delete.log
+transcriptions.db
