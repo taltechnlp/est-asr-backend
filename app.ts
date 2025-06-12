@@ -4,7 +4,9 @@ import { dotEnvConfig } from "./deps.ts";
 import { db } from "./sqlite.ts";
 import { resolvePath } from "./utils/paths.ts";
 
-dotEnvConfig({ export: true });
+// Load .env.defaults first, then .env (which overrides defaults)
+dotEnvConfig({ path: ".env.defaults", export: true });
+dotEnvConfig({ path: ".env", export: true });
 
 const HOST = Deno.env.get("APP_HOST");
 const PORT = Deno.env.get("APP_PORT");
@@ -22,12 +24,15 @@ const resumeNextflow = async (
 ) => {
   try {
     console.log("Using pipeline directory:", PIPELINE_DIR);
+    const resumeName = `${sessionId}_resume_${Date.now()}`;
     const command = new Deno.Command(NEXTFLOW_PATH, {
       args: [
       "run",
       "transcribe.nf",
       "-resume",
       sessionId,
+      "-name",
+      resumeName,
       "-with-weblog",
       `http://${HOST}:${PORT}/process/`,
       "--in",
@@ -41,7 +46,7 @@ const resumeNextflow = async (
     });
     const child = command.spawn();
     const status = await child.status;
-    console.log("Resumed workflow", sessionId, "status", status);
+    console.log("Resumed workflow", sessionId, "with name", resumeName, "status", status);
   } catch (error) {
     if (error.message.includes("Failed to spawn") || error.message.includes("No such cwd")) {
       console.error("\n=== Nextflow Error ===");
@@ -59,7 +64,10 @@ const resumeNextflow = async (
 
 if (unfinished.length > 0) {
   unfinished.forEach((workflow) => {
-    // TODO if no run_id, fail or start
+    if (!workflow.run_id) {
+      console.log("Skipping workflow", workflow.request_id, "as it has no run_id");
+      return;
+    }
     console.log("Resuming", workflow.request_id, workflow.run_id);
     resumeNextflow(
       workflow.run_id,

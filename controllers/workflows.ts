@@ -1,5 +1,15 @@
 import { IWeblog } from "../types.ts";
 import { db } from "../sqlite.ts";
+
+interface WorkflowRecord {
+  name: string;
+  request_id: string;
+  run_id?: string;
+  status?: string;
+  failed_count?: number;
+  result_location?: string;
+}
+
 const PIPELINE_DIR = Deno.env.get("PIPELINE_DIR");
 const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
 const TOTAL_TASKS = 13;
@@ -36,7 +46,14 @@ const addWeblog = async ({
       a++; */
       if (workflow.metadata) {
         const updatedAtUtc = new Date(workflow.utcTime).toISOString();
-        const matchingWorkflow = db.prepare(`SELECT name FROM workflows WHERE run_id = ?`).get(workflow.runId);
+        // First try to find by run_id
+        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        
+        // If not found and this is a resume run (name contains _resume_), try to find by the original run_id
+        if (!matchingWorkflow && workflow.runName.includes('_resume_')) {
+          const originalRunId = workflow.runName.split('_resume_')[0];
+          matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(originalRunId) as WorkflowRecord | undefined;
+        }
 
         if (matchingWorkflow) {
           // Delete temp files from work directory
@@ -54,8 +71,9 @@ const addWeblog = async ({
                         "running_count" = ?,
                         "pending_count" = ?,
                         "failed_count" = ?,
-                        "progress_length" = ?
-                        WHERE "run_id" = ?`).run(
+                        "progress_length" = ?,
+                        "run_id" = ?
+                        WHERE "request_id" = ?`).run(
                           workflow.event,
                           updatedAtUtc,
                           workflow.metadata?.workflow.stats.succeededCount,
@@ -63,7 +81,8 @@ const addWeblog = async ({
                           workflow.metadata?.workflow.stats.pendingCount,
                           workflow.metadata?.workflow.stats.failedCount,
                           workflow.metadata?.workflow.stats.progressLength,
-                          workflow.runId
+                          workflow.runId,
+                          matchingWorkflow.request_id
                         );
         } else {
           db.prepare(`UPDATE workflows SET 
@@ -89,20 +108,29 @@ const addWeblog = async ({
         }
       } else if (workflow.trace) {
         const updatedAtUtc = new Date(workflow.utcTime).toISOString();
-        const matchingWorkflow = db.prepare(`SELECT name FROM workflows WHERE run_id = ?`).get(workflow.runId);
+        // First try to find by run_id
+        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        
+        // If not found and this is a resume run (name contains _resume_), try to find by the original run_id
+        if (!matchingWorkflow && workflow.runName.includes('_resume_')) {
+          const originalRunId = workflow.runName.split('_resume_')[0];
+          matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(originalRunId) as WorkflowRecord | undefined;
+        }
 
         if (matchingWorkflow) {
           db.prepare(`UPDATE workflows SET 
             task_name = ?,
             "running_task_id" = ?, 
             "task_status" = ?, 
-            "updated_at_utc" = ?
-            WHERE "run_id" = ?`).run(
+            "updated_at_utc" = ?,
+            "run_id" = ?
+            WHERE "request_id" = ?`).run(
               workflow.trace.name,
               workflow.trace.task_id,
               workflow.event,
               updatedAtUtc,
-              workflow.runId
+              workflow.runId,
+              matchingWorkflow.request_id
             );
         } else {
           db.prepare(`UPDATE workflows SET 
@@ -127,11 +155,11 @@ const addWeblog = async ({
         success: true,
         data: workflow.runId,
       };
-    } catch (err) {
+    } catch (error: unknown) {
       response.status = 500;
       response.body = {
         success: false,
-        msg: err.toString(),
+        msg: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -288,7 +316,7 @@ const getResult = async ({
   params: any;
 }) => {
   if (params && params.requestId) {
-    const workflow = db.prepare(`SELECT status, result_location, failed_count FROM workflows WHERE request_id = ?`).get(params.requestId);
+    const workflow = db.prepare(`SELECT status, result_location, failed_count FROM workflows WHERE request_id = ?`).get(params.requestId) as WorkflowRecord | undefined;
 
     if (workflow) {
       if (workflow.failed_count && workflow.failed_count > 0) {

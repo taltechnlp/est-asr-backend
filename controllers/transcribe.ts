@@ -2,9 +2,14 @@ import { db } from "../sqlite.ts";
 import { resolvePath, ensureDir } from "../utils/paths.ts";
 import { v4 as uuidv4 } from "std/uuid/mod.ts";
 
-const PIPELINE_DIR = resolvePath(Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline");
-const NEXTFLOW_PATH = Deno.env.get("NEXTFLOW_PATH") || "nextflow";
-const UPLOAD_DIR = Deno.env.get("UPLOAD_DIR");
+let pipelineDirEnv = Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline";
+if (!pipelineDirEnv.startsWith("/")) {
+  pipelineDirEnv = resolvePath(pipelineDirEnv);
+}
+const PIPELINE_DIR = pipelineDirEnv;
+console.log("DEBUG: PIPELINE_DIR is", PIPELINE_DIR);
+const NEXTFLOW_PATH = "nextflow";
+const UPLOAD_DIR = resolvePath(Deno.env.get("UPLOAD_DIR") || "uploads");
 const APP_HOST = Deno.env.get("APP_HOST");
 const APP_PORT = Deno.env.get("APP_PORT");
 
@@ -62,25 +67,42 @@ const uploadFile = async ({
       const doPunctuation = typeof formData.fields.do_punctuation === "boolean"
         ? formData.fields.do_punctuation
         : true;
-      const filePath = resolvePath(`${outPath}/${fileName}`);
+      let filePath = fileName;
+      if (!fileName.startsWith("/")) {
+        filePath = resolvePath(`${outPath}/${fileName}`);
+      }
       const resultsDir = resolvePath(`${outPath}/${workflowName}`);
       const resultLocation = resultsDir;
       console.log(resultsDir, resultLocation);
 
       db.prepare(`
                 INSERT INTO workflows 
-                (request_id, name, created_at_utc, status, location, result_location)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (request_id, name, created_at_utc, status, location, result_location, run_id)
+                VALUES (?, ?, ?, ?, ?, ?, NULL)
                 `).run(requestId, workflowName, time, "queued", filePath, resultLocation);
-           
-      runNextflow(
-        filePath,
-        workflowName,
-        resultsDir,
-        doPunctuation,
-        doSpeakerId,
-        doLanguageId,
-      );
+      try {
+        await runNextflow(
+          filePath,
+          workflowName,
+          resultsDir,
+          doPunctuation,
+          doSpeakerId,
+          doLanguageId,
+        );
+      } catch (error) {
+        db.prepare(`UPDATE workflows SET status = ?, error_message = ? WHERE request_id = ?`).run(
+          "error",
+          error instanceof Error ? error.message : String(error),
+          requestId
+        );
+        response.status = 500;
+        response.body = {
+          success: false,
+          msg: "Failed to start Nextflow pipeline.",
+          error: error instanceof Error ? error.message : String(error),
+        };
+        return;
+      }
       
       const command_args = [
         "run",
@@ -188,8 +210,8 @@ const runNextflow = async (
     const child = command.spawn();
     const status = await child.status;
     console.log("Started workflow", workflowName, "status", status);
-  } catch (error) {
-    if (error.message.includes("Failed to spawn") || error.message.includes("No such cwd")) {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.message.includes("Failed to spawn") || error.message.includes("No such cwd"))) {
       console.error("\n=== Nextflow Error ===");
       console.error("Nextflow could not be found or the pipeline directory is incorrect.");
       console.error("\nPlease ensure that:");
@@ -198,6 +220,8 @@ const runNextflow = async (
       console.error("3. The pipeline directory exists at:", PIPELINE_DIR);
       console.error("\nInstallation instructions can be found in the est-asr-pipeline project README.");
       console.error("===================\n");
+    } else {
+      console.error("Error running Nextflow:", error instanceof Error ? error.message : String(error));
     }
     throw error;
   }

@@ -1,3 +1,5 @@
+import { DB } from "https://deno.land/x/sqlite/mod.ts";
+
 export const createTable =
 `
 CREATE TABLE IF NOT EXISTS workflows (
@@ -18,6 +20,11 @@ CREATE TABLE IF NOT EXISTS workflows (
     task_name text,
     task_status text,
     result_location text,
-    result_sent boolean
+    result_sent boolean,
+    error_message text
 )
-`
+`;
+
+const db = new DB("transcriptions.db");
+db.execute(createTable);
+db.close();
