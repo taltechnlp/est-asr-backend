@@ -1,28 +1,36 @@
 <head></head>
 <body>
     <h1>Upload a file to transcribe</h1>
-    <form action="/upload" enctype="multipart/form-data" method="post" >
+    <form action="/upload" enctype="multipart/form-data" method="post" id="uploadForm">
+        <label for="do_speaker_id">Do speaker identification?</label>
+        <input type="checkbox" id="do_speaker_id" name="do_speaker_id" value="yes" checked><br>
+        <label for="do_language_id">Do language identification?</label>
+        <input type="checkbox" id="do_language_id" name="do_language_id" value="yes" checked><br>
+        <label for="do_punctuation">Add punctuation?</label>
+        <input type="checkbox" id="do_punctuation" name="do_punctuation" value="yes" checked><br>
         <div>File: <input type="file" name="singleFile"/></div>
         <input type="submit" value="Upload" />
     </form>
 
 </body>
 <script>
-    const input = document.querySelector('input[type="file"]')
-    const button = document.querySelector('input[type="submit"]')
-    const onSubmit= () => {
-        const data = new FormData()
-        data.append('singleFile', input.files[0]);
+    const form = document.getElementById('uploadForm');
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
         fetch("http://localhost:7700/upload", {
-            "body": data,
-            "method": "POST",
-            "referrerPolicy": "strict-origin-when-cross-origin",
-            "mode": "no-cors"   
-        }).then(
-            success => console.log(success) // Handle the success response object
-        ).catch(
-            error => console.log(error) // Handle the error response object
-        );
-    };
-    button.addEventListener('submit', onSubmit, false);
+            method: "POST",
+            body: formData
+        }).then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else {
+                return response.json().then(data => {
+                    if (data.redirect) {
+                        window.location.href = data.redirect;
+                    }
+                });
+            }
+        }).catch(error => console.log(error));
+    });
 </script>

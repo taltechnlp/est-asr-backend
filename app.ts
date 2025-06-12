@@ -24,7 +24,7 @@ const resumeNextflow = async (
 ) => {
   try {
     console.log("Using pipeline directory:", PIPELINE_DIR);
-    const resumeName = `${sessionId}_resume_${Date.now()}`;
+    const resumeName = `resume_${Date.now()}`;
     const command = new Deno.Command(NEXTFLOW_PATH, {
       args: [
       "run",
@@ -48,7 +48,7 @@ const resumeNextflow = async (
     const status = await child.status;
     console.log("Resumed workflow", sessionId, "with name", resumeName, "status", status);
   } catch (error) {
-    if (error.message.includes("Failed to spawn") || error.message.includes("No such cwd")) {
+    if ((error as Error).message.includes("Failed to spawn") || (error as Error).message.includes("No such cwd")) {
       console.error("\n=== Nextflow Error ===");
       console.error("Nextflow could not be found or the pipeline directory is incorrect.");
       console.error("\nPlease ensure that:");

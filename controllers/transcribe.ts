@@ -2,10 +2,8 @@ import { db } from "../sqlite.ts";
 import { resolvePath, ensureDir } from "../utils/paths.ts";
 import { v4 as uuidv4 } from "std/uuid/mod.ts";
 
-let pipelineDirEnv = Deno.env.get("PIPELINE_DIR") || "est-asr-pipeline";
-if (!pipelineDirEnv.startsWith("/")) {
-  pipelineDirEnv = resolvePath(pipelineDirEnv);
-}
+const pipelineDirEnv = Deno.env.get("PIPELINE_DIR");
+console.log("DEBUG: PIPELINE_DIR from env is", pipelineDirEnv);
 const PIPELINE_DIR = pipelineDirEnv;
 console.log("DEBUG: PIPELINE_DIR is", PIPELINE_DIR);
 const NEXTFLOW_PATH = "nextflow";
@@ -143,11 +141,12 @@ const uploadFile = async ({
       console.log(status, "status");
 
       response.status = 201;
+      response.headers.set("Location", `/progress/${requestId}`);
       response.body = {
         success: true,
         requestId,
+        redirect: `/progress/${requestId}`
       };
-      // response.redirect("/progress/" + requestId);
     }
   } else {
     response.status = 400;
@@ -200,7 +199,9 @@ const runNextflow = async (
       "--do_language_id",
       doLanguageId.toString(),
     ];
-    console.log(command_args, PIPELINE_DIR);
+    console.log("DEBUG: Running Nextflow with args:", command_args);
+    console.log("DEBUG: Current working directory:", PIPELINE_DIR);
+    console.log("DEBUG: Nextflow path:", NEXTFLOW_PATH);
     const command = new Deno.Command(NEXTFLOW_PATH, {
       args: command_args,
       stdin: "piped",
@@ -209,6 +210,7 @@ const runNextflow = async (
     });
     const child = command.spawn();
     const status = await child.status;
+    console.log("DEBUG: Nextflow command status:", status);
     console.log("Started workflow", workflowName, "status", status);
   } catch (error: unknown) {
     if (error instanceof Error && (error.message.includes("Failed to spawn") || error.message.includes("No such cwd"))) {
