@@ -207,16 +207,18 @@ const runNextflow = async (
     console.log("DEBUG: Running Nextflow with args:", command_args);
     console.log("DEBUG: Current working directory:", PIPELINE_DIR);
     console.log("DEBUG: Nextflow path:", NEXTFLOW_PATH);
-    const command = new Deno.Command(NEXTFLOW_PATH, {
-      args: command_args,
-      stdin: "piped",
-      stdout: "piped",
-      cwd: PIPELINE_DIR
+    
+    // Use setsid to create a new session and ensure the process is detached
+    const setsidCommand = new Deno.Command("setsid", {
+      args: [NEXTFLOW_PATH, ...command_args],
+      cwd: PIPELINE_DIR,
+      stdin: "null",
+      stdout: "null",
+      stderr: "null",
     });
-    const child = command.spawn();
-    const status = await child.status;
-    console.log("DEBUG: Nextflow command status:", status);
-    console.log("Started workflow", workflowName, "status", status);
+    
+    const child = setsidCommand.spawn();
+    console.log("Started workflow", workflowName, "in background mode with setsid");
   } catch (error: unknown) {
     if (error instanceof Error && (error.message.includes("Failed to spawn") || error.message.includes("No such cwd"))) {
       console.error("\n=== Nextflow Error ===");

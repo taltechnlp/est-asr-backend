@@ -62,6 +62,7 @@ const resumeNextflow = async (
   }
 };
 
+/* Commenting out resume functionality for now
 if (unfinished.length > 0) {
   unfinished.forEach((workflow) => {
     if (!workflow.run_id) {
@@ -78,6 +79,7 @@ if (unfinished.length > 0) {
     });
   });
 }
+*/
 
 const app: Application = new Application();
 

@@ -211,3 +211,10 @@ HTTP 404
 {
   requestId: "77101bdb-f073-4c74-9137-db3d45b59990",
 }
+
+## Process Resilience
+
+**Note:** When you upload a file, the backend launches the Nextflow pipeline as a fully detached process (using `setsid`). This means:
+- Nextflow jobs will continue running even if you restart or stop the Deno server.
+- You can safely redeploy or restart the backend without interrupting ongoing transcriptions.
+- Nextflow will keep sending progress and result events to the backend as long as it is reachable.
