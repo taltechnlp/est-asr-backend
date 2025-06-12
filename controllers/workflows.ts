@@ -46,8 +46,13 @@ const addWeblog = async ({
       a++; */
       if (workflow.metadata) {
         const updatedAtUtc = new Date(workflow.utcTime).toISOString();
-        // First try to find by run_id
-        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        // First try to find by name since that's what Nextflow sends in runName
+        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE name = ?`).get(workflow.runName) as WorkflowRecord | undefined;
+        
+        // If not found by name, try run_id
+        if (!matchingWorkflow) {
+          matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        }
         
         // If not found and this is a resume run (name contains _resume_), try to find by the original run_id
         if (!matchingWorkflow && workflow.runName.includes('_resume_')) {
@@ -108,8 +113,13 @@ const addWeblog = async ({
         }
       } else if (workflow.trace) {
         const updatedAtUtc = new Date(workflow.utcTime).toISOString();
-        // First try to find by run_id
-        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        // First try to find by name since that's what Nextflow sends in runName
+        let matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE name = ?`).get(workflow.runName) as WorkflowRecord | undefined;
+        
+        // If not found by name, try run_id
+        if (!matchingWorkflow) {
+          matchingWorkflow = db.prepare(`SELECT name, request_id FROM workflows WHERE run_id = ?`).get(workflow.runId) as WorkflowRecord | undefined;
+        }
         
         // If not found and this is a resume run (name contains _resume_), try to find by the original run_id
         if (!matchingWorkflow && workflow.runName.includes('_resume_')) {
