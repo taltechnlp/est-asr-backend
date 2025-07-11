@@ -1,6 +1,5 @@
 import { db } from "../sqlite.ts";
 import { resolvePath, ensureDir } from "../utils/paths.ts";
-import { v4 as uuidv4 } from "std/uuid/mod.ts";
 import { dotEnvConfig } from "../deps.ts";
 
 // Ensure environment variables are loaded
@@ -13,6 +12,7 @@ const PIPELINE_DIR = pipelineDirEnv;
 console.log("DEBUG: PIPELINE_DIR is", PIPELINE_DIR);
 const NEXTFLOW_PATH = "nextflow";
 const UPLOAD_DIR = resolvePath(Deno.env.get("UPLOAD_DIR") || "uploads");
+const RESULTS_DIR = resolvePath(Deno.env.get("RESULTS_DIR") || "results");
 const APP_HOST = Deno.env.get("APP_HOST");
 const APP_PORT = Deno.env.get("APP_PORT");
 
@@ -50,12 +50,13 @@ const uploadFile = async ({
       };
     } else {
       const body = await request.body({ type: "form-data" });
-      const outPath = resolvePath(UPLOAD_DIR || "uploads");
-      await ensureDir(outPath);
+      const uploadPath = resolvePath(UPLOAD_DIR || "uploads");
+      await ensureDir(uploadPath);
+      await ensureDir(RESULTS_DIR);
       
       const formData = await body.value.read({
         maxFileSize: MAX_SIZE_BYTES,
-        outPath,
+        outPath: uploadPath,
       });
       const requestId = crypto.randomUUID();
       const workflowName = transformUUIDToPattern(requestId);
@@ -72,9 +73,9 @@ const uploadFile = async ({
         : true;
       let filePath = fileName;
       if (!fileName.startsWith("/")) {
-        filePath = resolvePath(`${outPath}/${fileName}`);
+        filePath = resolvePath(`${uploadPath}/${fileName}`);
       }
-      const resultsDir = resolvePath(`${outPath}/${workflowName}`);
+      const resultsDir = resolvePath(`${RESULTS_DIR}/${workflowName}`);
       const resultLocation = resultsDir;
       console.log(resultsDir, resultLocation);
 
